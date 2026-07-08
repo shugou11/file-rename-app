@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>書類一括リネーム＆邸名フォルダ分け</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --ink:#1f2a44;
+    --ink-soft:#5a6580;
+    --paper:#f7f8f6;
+    --grid:#e3e7e0;
+    --line:#c9d0c5;
+    --accent:#b5342a;
+    --accent-soft:#f6e7e5;
+    --ok:#2e7d4f;
+    --mono:"Consolas","Menlo","MS Gothic",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"Yu Gothic UI","Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;
+    color:var(--ink);
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+      var(--paper);
+    background-size:24px 24px,24px 24px,auto;
+    min-height:100vh;
+    padding:24px 16px 64px;
+  }
+  .sheet{max-width:900px;margin:0 auto}
+
+  header{
+    border:2px solid var(--ink);
+    background:#fff;
+    display:flex;
+    align-items:stretch;
+    margin-bottom:20px;
+  }
+  .tb-main{flex:1;padding:16px 20px;border-right:2px solid var(--ink)}
+  .tb-main h1{
+    font-family:"Yu Mincho","Hiragino Mincho ProN",serif;
+    font-size:1.35rem;letter-spacing:.12em;
+  }
+  .tb-main p{font-size:.8rem;color:var(--ink-soft);margin-top:4px;letter-spacing:.05em}
+  .tb-stamp{
+    width:84px;display:flex;align-items:center;justify-content:center;
+    color:var(--accent);
+  }
+  .tb-stamp span{
+    border:2.5px solid var(--accent);border-radius:50%;
+    width:56px;height:56px;display:flex;align-items:center;justify-content:center;
+    font-family:"Yu Mincho",serif;font-size:.95rem;font-weight:700;
+    transform:rotate(-8deg);letter-spacing:.05em;
+  }
+
+  .card{
+    background:#fff;border:1px solid var(--line);
+    padding:20px;margin-bottom:16px;
+  }
+  .card h2{
+    font-size:.8rem;letter-spacing:.2em;color:var(--ink-soft);
+    border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:16px;
+    font-weight:600;
+  }
+
+  /* 邸名リスト */
+  .teimei-add{display:flex;gap:8px;max-width:420px}
+  .teimei-add input{
+    flex:1;padding:9px 10px;border:1px solid var(--line);
+    font-size:.95rem;font-family:inherit;border-radius:0;color:var(--ink);
+  }
+  .teimei-add input:focus{outline:2px solid var(--ink);outline-offset:1px}
+  .teimei-add button{
+    background:var(--ink);color:#fff;border:none;padding:0 20px;
+    font-family:inherit;font-size:.9rem;cursor:pointer;letter-spacing:.1em;
+  }
+  .teimei-add button:hover{background:#33405f}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .chip{
+    display:inline-flex;align-items:center;gap:8px;
+    border:1.5px solid var(--ink);background:#fff;
+    padding:6px 8px 6px 14px;font-size:.9rem;font-weight:600;
+    cursor:pointer;user-select:none;
+  }
+  .chip:hover{background:var(--paper)}
+  .chip.active{
+    background:var(--ink);color:#fff;
+  }
+  .chip.active .cnt{color:#c8cede}
+  .chip.active button{color:#c8cede}
+  .chip.mode{
+    border-style:dashed;border-color:var(--ink-soft);color:var(--ink-soft);
+    padding:6px 14px;
+  }
+  .chip.mode.active{
+    background:var(--ink-soft);border-color:var(--ink-soft);color:#fff;border-style:solid;
+  }
+  .active-hint{
+    margin-top:12px;font-size:.85rem;color:var(--accent);font-weight:600;
+  }
+  .chip .cnt{
+    font-size:.72rem;color:var(--ink-soft);font-weight:400;
+    font-family:var(--mono);
+  }
+  .chip button{
+    border:none;background:none;color:var(--ink-soft);cursor:pointer;
+    font-size:1rem;line-height:1;padding:2px 4px;
+  }
+  .chip button:hover{color:var(--accent)}
+  .chips-empty{font-size:.82rem;color:var(--ink-soft);margin-top:12px}
+
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
+  .field label{display:block;font-size:.78rem;color:var(--ink-soft);margin-bottom:5px;letter-spacing:.05em}
+  .field input,.field select{
+    width:100%;padding:9px 10px;border:1px solid var(--line);
+    font-size:.95rem;font-family:inherit;background:#fff;color:var(--ink);border-radius:0;
+  }
+  .field input:focus,.field select:focus{outline:2px solid var(--ink);outline-offset:1px}
+
+  .toggle{
+    display:flex;align-items:center;gap:10px;margin-top:16px;
+    font-size:.9rem;cursor:pointer;user-select:none;
+  }
+  .toggle input{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+
+  .name-preview{
+    margin-top:14px;padding:14px 16px;background:var(--paper);
+    border:1px dashed var(--ink-soft);
+    font-family:var(--mono);font-size:1rem;word-break:break-all;
+  }
+  .name-preview .lbl{
+    display:block;font-family:"Yu Gothic UI",sans-serif;
+    font-size:.72rem;color:var(--ink-soft);margin-bottom:6px;letter-spacing:.15em;
+  }
+  .name-preview .folder{color:var(--accent);font-weight:700}
+
+  .drop{
+    border:2px dashed var(--ink-soft);background:#fff;
+    padding:38px 20px;text-align:center;cursor:pointer;
+    transition:background .15s,border-color .15s;
+  }
+  .drop:hover,.drop:focus-visible{border-color:var(--ink);background:var(--paper)}
+  .drop.over{border-color:var(--accent);background:var(--accent-soft)}
+  .drop p{font-size:.98rem}
+  .drop small{display:block;margin-top:6px;color:var(--ink-soft);font-size:.78rem}
+  .drop:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  th{
+    text-align:left;font-size:.72rem;letter-spacing:.12em;color:var(--ink-soft);
+    border-bottom:1px solid var(--ink);padding:6px 8px;font-weight:600;
+  }
+  td{border-bottom:1px solid var(--grid);padding:7px 8px;vertical-align:middle}
+  td.no{width:32px;color:var(--ink-soft);font-family:var(--mono)}
+  td.old{color:var(--ink-soft);word-break:break-all}
+  td.sel select{
+    padding:6px 8px;border:1px solid var(--line);font-family:inherit;
+    font-size:.85rem;background:#fff;color:var(--ink);max-width:150px;border-radius:0;
+  }
+  td.sel select.auto{border-color:var(--ok)}
+  td.new{font-family:var(--mono);word-break:break-all;font-weight:600}
+  td.new .folder{color:var(--accent)}
+  td.ctrl{width:106px;white-space:nowrap;text-align:right}
+  .mini{
+    border:1px solid var(--line);background:#fff;color:var(--ink);
+    width:28px;height:28px;cursor:pointer;font-size:.82rem;margin-left:4px;
+  }
+  .mini:hover{border-color:var(--ink)}
+  .mini.del:hover{border-color:var(--accent);color:var(--accent)}
+  .mini:disabled{opacity:.3;cursor:default}
+  .empty{color:var(--ink-soft);font-size:.85rem;text-align:center;padding:22px 0}
+
+  .actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:18px}
+  .btn-primary{
+    background:var(--accent);color:#fff;border:none;
+    padding:13px 26px;font-size:1rem;font-family:inherit;
+    letter-spacing:.1em;cursor:pointer;font-weight:600;
+  }
+  .btn-primary:hover{background:#9c2b22}
+  .btn-primary:disabled{background:#c9c9c9;cursor:default}
+  .btn-sub{
+    background:#fff;border:1px solid var(--ink);color:var(--ink);
+    padding:12px 18px;font-size:.88rem;font-family:inherit;cursor:pointer;
+  }
+  .btn-sub:hover{background:var(--paper)}
+  .btn-sub:disabled{opacity:.4;cursor:default}
+  .status{font-size:.85rem;color:var(--ok);font-weight:600}
+  .status.err{color:var(--accent)}
+
+  @media(max-width:600px){
+    td.old,th.old{display:none}
+    .tb-stamp{display:none}
+    .tb-main{border-right:none}
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <div class="tb-main">
+      <h1>書類一括リネーム＆フォルダ分け</h1>
+      <p>PDF・写真・Excel・Wordなど何でもOK｜邸名・日付・連番で改名し、邸名フォルダに自動振り分け｜処理はこの画面内で完結</p>
+    </div>
+    <div class="tb-stamp"><span>整理</span></div>
+  </header>
+
+  <section class="card">
+    <h2>01｜邸名リスト</h2>
+    <div class="teimei-add">
+      <input type="text" id="teimeiInput" placeholder="例：山田邸（Enterでも追加）">
+      <button id="teimeiAdd">追加</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <p class="chips-empty" id="chipsEmpty">邸名を1つ以上登録してください。登録した邸名をクリックして選択すると、以降に追加するファイルはすべてその邸になります。</p>
+    <p class="active-hint" id="activeHint" style="display:none"></p>
+  </section>
+
+  <section class="card">
+    <h2>02｜命名ルール</h2>
+    <div class="form-grid">
+      <div class="field">
+        <label for="date">日付</label>
+        <input type="date" id="date">
+      </div>
+      <div class="field">
+        <label for="dateFmt">日付の形式</label>
+        <select id="dateFmt">
+          <option value="YYYYMMDD">20260707</option>
+          <option value="YYYY-MM-DD">2026-07-07</option>
+          <option value="YYMMDD">260707</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="order">並び順</label>
+        <select id="order">
+          <option value="t-d-n">邸名 → 日付 → 連番</option>
+          <option value="d-t-n">日付 → 邸名 → 連番</option>
+          <option value="t-n-d">邸名 → 連番 → 日付</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="start">連番の開始</label>
+        <input type="number" id="start" value="1" min="0">
+      </div>
+      <div class="field">
+        <label for="digits">連番の桁数</label>
+        <select id="digits">
+          <option value="2">2桁（01）</option>
+          <option value="3" selected>3桁（001）</option>
+          <option value="4">4桁（0001）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sep">区切り文字</label>
+        <select id="sep">
+          <option value="_">アンダーバー（_）</option>
+          <option value="-">ハイフン（-）</option>
+        </select>
+      </div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="useFolder" checked>
+      邸名ごとにフォルダを作って振り分ける
+    </label>
+    <label class="toggle">
+      <input type="checkbox" id="useTypeFolder" checked>
+      さらにファイルの種類ごとにサブフォルダを作る（写真／PDF／Excel／Word／その他）
+    </label>
+    <p style="font-size:.78rem;color:var(--ink-soft);margin-top:8px">※ 連番はフォルダごとに開始番号からリセットされます</p>
+    <div class="name-preview">
+      <span class="lbl">仕上がりイメージ</span>
+      <span id="previewText"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>03｜ファイル</h2>
+    <div class="drop" id="drop" role="button" tabindex="0" aria-label="ファイルを選択">
+      <p>ここにファイルをドラッグ＆ドロップ</p>
+      <small id="dropHint">PDF・写真（JPG/PNG）・Excel・Wordなど何でもOK（複数可）。ファイル名に邸名が含まれていれば自動で振り分けます</small>
+      <input type="file" id="fileInput" multiple hidden>
+    </div>
+
+    <div style="margin-top:16px">
+      <table id="fileTable" style="display:none">
+        <thead>
+          <tr>
+            <th>No.</th>
+            <th class="old">元のファイル名</th>
+            <th>邸名</th>
+            <th>新しい保存先・ファイル名</th>
+            <th style="text-align:right">順番・削除</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <p class="empty" id="emptyMsg">まだファイルがありません。上のエリアに追加してください。</p>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="lastBtn" style="display:none"></button>
+      <button class="btn-primary" id="saveBtn" disabled>フォルダを選んで直接保存</button>
+      <button class="btn-sub" id="zipBtn" disabled>ZIPでダウンロード</button>
+      <button class="btn-sub" id="clearBtn" disabled>リストを空にする</button>
+      <span class="status" id="status"></span>
+    </div>
+    <p style="font-size:.78rem;color:var(--ink-soft);margin-top:10px" id="saveHint">
+      「直接保存」は保存先フォルダを選ぶと、その中に邸名・種類のフォルダを作ってリネーム済みファイルを書き込みます（Chrome / Edge対応）。一度保存すると次回から「前回のフォルダに保存」でワンクリック保存できます。Googleドライブ（パソコン版）のフォルダを選べば、自動でクラウドにも同期されます。
+    </p>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var teimeiList = [];        // ["山田邸", "佐藤邸"]
+  var files = [];             // {file:File, teimei:String|null, auto:Boolean}
+  var activeTeimei = null;    // 選択中の邸名（nullなら自動判定モード）
+
+  var $ = function(id){ return document.getElementById(id); };
+  var teimeiInput = $("teimeiInput"), teimeiAdd = $("teimeiAdd"),
+      chips = $("chips"), chipsEmpty = $("chipsEmpty"),
+      activeHint = $("activeHint"), dropHint = $("dropHint"),
+      dateEl = $("date"), dateFmt = $("dateFmt"),
+      order = $("order"), start = $("start"), digits = $("digits"), sep = $("sep"),
+      useFolder = $("useFolder"), useTypeFolder = $("useTypeFolder"),
+      drop = $("drop"), fileInput = $("fileInput"), tbody = $("tbody"),
+      table = $("fileTable"), emptyMsg = $("emptyMsg"),
+      zipBtn = $("zipBtn"), saveBtn = $("saveBtn"), lastBtn = $("lastBtn"), clearBtn = $("clearBtn"), statusEl = $("status"),
+      previewText = $("previewText");
+
+  (function(){
+    var d = new Date();
+    var m = ("0"+(d.getMonth()+1)).slice(-2);
+    var day = ("0"+d.getDate()).slice(-2);
+    dateEl.value = d.getFullYear()+"-"+m+"-"+day;
+  })();
+
+  function sanitize(s){
+    return s.replace(/[\\\/:*?"<>|]/g, "").trim();
+  }
+
+  function formatDate(){
+    var v = dateEl.value;
+    if(!v) return "";
+    var p = v.split("-");
+    var fmt = dateFmt.value;
+    if(fmt === "YYYYMMDD") return p[0]+p[1]+p[2];
+    if(fmt === "YYMMDD") return p[0].slice(2)+p[1]+p[2];
+    return v;
+  }
+
+  function pad(n){
+    var s = String(n);
+    var dg = parseInt(digits.value,10);
+    while(s.length < dg){ s = "0"+s; }
+    return s;
+  }
+
+  // 拡張子 → 種類フォルダ名
+  function getCategory(ext){
+    var e = ext.replace(".","");
+    if(["jpg","jpeg","png","gif","heic","heif","webp","bmp","tiff","tif"].indexOf(e) !== -1) return "写真";
+    if(e === "pdf") return "PDF";
+    if(["xlsx","xls","xlsm","csv"].indexOf(e) !== -1) return "Excel";
+    if(["docx","doc"].indexOf(e) !== -1) return "Word";
+    if(["mp4","mov","avi","wmv"].indexOf(e) !== -1) return "動画";
+    return "その他";
+  }
+
+  // ファイルごとの連番を計算（フォルダごとにリセット）
+  function computeNumbers(){
+    var base = parseInt(start.value,10)||0;
+    var counters = {};
+    return files.map(function(item){
+      var key = "";
+      if(useFolder.checked){ key += (item.teimei || "＿未設定"); }
+      if(useTypeFolder.checked){ key += "/" + getCategory(getExt(item.file.name)); }
+      if(key === ""){ key = "__all__"; }
+      if(counters[key] === undefined){ counters[key] = base; }
+      var n = counters[key];
+      counters[key]++;
+      return n;
+    });
+  }
+
+  // 拡張子を取り出す（例：".pdf"、".jpg"。なければ空文字）
+  function getExt(fileName){
+    var m = fileName.match(/\.[A-Za-z0-9]+$/);
+    return m ? m[0].toLowerCase() : "";
+  }
+
+  function buildFileName(teimei, num, ext){
+    var s = sep.value;
+    var t = sanitize(teimei || "");
+    var d = formatDate();
+    var numStr = pad(num);
+    var parts;
+    switch(order.value){
+      case "d-t-n": parts = [d, t, numStr]; break;
+      case "t-n-d": parts = [t, numStr, d]; break;
+      default:      parts = [t, d, numStr];
+    }
+    parts = parts.filter(function(x){ return x !== ""; });
+    return parts.join(s) + (ext || "");
+  }
+
+  function buildPath(teimei, num, ext){
+    var name = buildFileName(teimei, num, ext);
+    var segs = [];
+    if(useFolder.checked){
+      segs.push(sanitize(teimei || "") || "未設定");
+    }
+    if(useTypeFolder.checked){
+      segs.push(getCategory(ext));
+    }
+    if(segs.length){
+      var folder = segs.join("/");
+      return {folder: folder, name: name, full: folder + "/" + name};
+    }
+    return {folder: null, name: name, full: name};
+  }
+
+  // ファイル名から邸名を自動判定（長い邸名を優先してマッチ）
+  function detectTeimei(fileName){
+    var sorted = teimeiList.slice().sort(function(a,b){ return b.length - a.length; });
+    for(var i=0;i<sorted.length;i++){
+      if(fileName.indexOf(sorted[i]) !== -1) return sorted[i];
+      // 「邸」を除いた名前でもマッチ（例：登録「山田邸」、ファイル名「山田様_図面.pdf」）
+      var core = sorted[i].replace(/邸$/,"");
+      if(core.length >= 2 && fileName.indexOf(core) !== -1) return sorted[i];
+    }
+    return null;
+  }
+
+  function renderChips(){
+    chips.innerHTML = "";
+    chipsEmpty.style.display = teimeiList.length ? "none" : "block";
+
+    if(teimeiList.length){
+      // 自動判定モードのチップ
+      var autoChip = document.createElement("span");
+      autoChip.className = "chip mode" + (activeTeimei === null ? " active" : "");
+      autoChip.textContent = "自動判定";
+      autoChip.title = "ファイル名から邸名を自動判定するモード";
+      autoChip.onclick = function(){ activeTeimei = null; renderAll(); };
+      chips.appendChild(autoChip);
+    }
+
+    teimeiList.forEach(function(t, idx){
+      var count = files.filter(function(f){ return f.teimei === t; }).length;
+      var chip = document.createElement("span");
+      chip.className = "chip" + (activeTeimei === t ? " active" : "");
+      chip.title = "クリックで選択：以降に追加するファイルはすべて「" + t + "」になります";
+      var label = document.createElement("span");
+      label.textContent = t;
+      var cnt = document.createElement("span");
+      cnt.className = "cnt";
+      cnt.textContent = count + "件";
+      var del = document.createElement("button");
+      del.textContent = "×";
+      del.title = t + " を削除";
+      del.onclick = function(e){
+        e.stopPropagation();
+        teimeiList.splice(idx,1);
+        if(activeTeimei === t){ activeTeimei = null; }
+        files.forEach(function(f){
+          if(f.teimei === t){ f.teimei = null; f.auto = false; }
+        });
+        renderAll();
+      };
+      chip.onclick = function(){
+        activeTeimei = (activeTeimei === t) ? null : t;
+        renderAll();
+      };
+      chip.appendChild(label); chip.appendChild(cnt); chip.appendChild(del);
+      chips.appendChild(chip);
+    });
+
+    // 選択状態のヒント
+    if(activeTeimei){
+      activeHint.style.display = "block";
+      activeHint.textContent = "★ 選択中：追加するファイルはすべて「" + activeTeimei + "」になります（もう一度クリックで解除）";
+      dropHint.textContent = "追加したファイルはすべて「" + activeTeimei + "」に振り分けられます";
+    }else{
+      activeHint.style.display = "none";
+      dropHint.textContent = "PDF・写真（JPG/PNG）・Excel・Wordなど何でもOK（複数可）。ファイル名に邸名が含まれていれば自動で振り分けます";
+    }
+  }
+
+  function renderPreview(){
+    var sample = activeTeimei || (teimeiList.length ? teimeiList[0] : "山田邸");
+    var sampleExt = files.length ? getExt(files[0].file.name) : ".pdf";
+    var p = buildPath(sample, parseInt(start.value,10)||0, sampleExt);
+    if(p.folder){
+      previewText.innerHTML = '<span class="folder">' + escapeHtml(p.folder) + '/</span>' + escapeHtml(p.name);
+    }else{
+      previewText.textContent = p.name;
+    }
+  }
+
+  function escapeHtml(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  function renderTable(){
+    tbody.innerHTML = "";
+    var has = files.length > 0;
+    table.style.display = has ? "table" : "none";
+    emptyMsg.style.display = has ? "none" : "block";
+    zipBtn.disabled = !has;
+    saveBtn.disabled = !has;
+    lastBtn.disabled = !has;
+    clearBtn.disabled = !has;
+
+    var numbers = computeNumbers();
+
+    files.forEach(function(item, i){
+      var tr = document.createElement("tr");
+
+      var tdNo = document.createElement("td");
+      tdNo.className = "no";
+      tdNo.textContent = i+1;
+
+      var tdOld = document.createElement("td");
+      tdOld.className = "old";
+      tdOld.textContent = item.file.name;
+
+      var tdSel = document.createElement("td");
+      tdSel.className = "sel";
+      var select = document.createElement("select");
+      if(item.auto){ select.className = "auto"; select.title = "ファイル名から自動判定"; }
+      var optNone = document.createElement("option");
+      optNone.value = ""; optNone.textContent = "（未設定）";
+      select.appendChild(optNone);
+      teimeiList.forEach(function(t){
+        var opt = document.createElement("option");
+        opt.value = t; opt.textContent = t;
+        if(item.teimei === t) opt.selected = true;
+        select.appendChild(opt);
+      });
+      select.onchange = function(){
+        item.teimei = select.value || null;
+        item.auto = false;
+        renderAll();
+      };
+      tdSel.appendChild(select);
+
+      var tdNew = document.createElement("td");
+      tdNew.className = "new";
+      var p = buildPath(item.teimei, numbers[i], getExt(item.file.name));
+      if(p.folder){
+        tdNew.innerHTML = '<span class="folder">' + escapeHtml(p.folder) + '/</span>' + escapeHtml(p.name);
+      }else{
+        tdNew.textContent = p.name;
+      }
+
+      var tdCtrl = document.createElement("td");
+      tdCtrl.className = "ctrl";
+      var up = document.createElement("button");
+      up.className = "mini"; up.textContent = "↑"; up.title = "上へ";
+      up.disabled = (i === 0);
+      up.onclick = function(){ var t=files[i-1]; files[i-1]=files[i]; files[i]=t; renderAll(); };
+      var down = document.createElement("button");
+      down.className = "mini"; down.textContent = "↓"; down.title = "下へ";
+      down.disabled = (i === files.length-1);
+      down.onclick = function(){ var t=files[i+1]; files[i+1]=files[i]; files[i]=t; renderAll(); };
+      var del = document.createElement("button");
+      del.className = "mini del"; del.textContent = "×"; del.title = "削除";
+      del.onclick = function(){ files.splice(i,1); renderAll(); };
+      tdCtrl.appendChild(up); tdCtrl.appendChild(down); tdCtrl.appendChild(del);
+
+      tr.appendChild(tdNo); tr.appendChild(tdOld); tr.appendChild(tdSel);
+      tr.appendChild(tdNew); tr.appendChild(tdCtrl);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderAll(){
+    renderChips();
+    renderTable();
+    renderPreview();
+  }
+
+  function addTeimei(){
+    var t = sanitize(teimeiInput.value);
+    if(!t) return;
+    if(teimeiList.indexOf(t) !== -1){
+      setStatus("「" + t + "」はすでに登録されています", true);
+      return;
+    }
+    teimeiList.push(t);
+    activeTeimei = t;   // 追加した邸名をそのまま選択状態に
+    teimeiInput.value = "";
+    // 未設定ファイルを再判定
+    files.forEach(function(f){
+      if(!f.teimei){
+        var d = detectTeimei(f.file.name);
+        if(d){ f.teimei = d; f.auto = true; }
+      }
+    });
+    renderAll();
+    teimeiInput.focus();
+  }
+
+  function addFiles(list){
+    var added = 0, matched = 0;
+    Array.prototype.forEach.call(list, function(f){
+      var t, auto;
+      if(activeTeimei){
+        t = activeTeimei; auto = false;   // 選択中の邸名で固定
+      }else{
+        t = detectTeimei(f.name); auto = !!t;
+        if(t) matched++;
+      }
+      files.push({file:f, teimei:t, auto:auto});
+      added++;
+    });
+    var msg = added + " 件追加";
+    if(activeTeimei){
+      msg += "（すべて「" + activeTeimei + "」に設定）";
+    }else if(matched){
+      msg += "（うち " + matched + " 件は邸名を自動判定）";
+    }
+    setStatus(msg, false);
+    renderAll();
+  }
+
+  function setStatus(msg, isErr){
+    statusEl.textContent = msg;
+    statusEl.className = "status" + (isErr ? " err" : "");
+    if(msg){
+      clearTimeout(setStatus._t);
+      setStatus._t = setTimeout(function(){ statusEl.textContent=""; }, 6000);
+    }
+  }
+
+  // 邸名追加
+  teimeiAdd.addEventListener("click", addTeimei);
+  teimeiInput.addEventListener("keydown", function(e){
+    if(e.key === "Enter"){ e.preventDefault(); addTeimei(); }
+  });
+
+  // ドロップゾーン
+  drop.addEventListener("click", function(){ fileInput.click(); });
+  drop.addEventListener("keydown", function(e){
+    if(e.key === "Enter" || e.key === " "){ e.preventDefault(); fileInput.click(); }
+  });
+  fileInput.addEventListener("change", function(){
+    addFiles(fileInput.files);
+    fileInput.value = "";
+  });
+  ["dragenter","dragover"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){
+      e.preventDefault(); e.stopPropagation();
+      drop.classList.add("over");
+    });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){
+      e.preventDefault(); e.stopPropagation();
+      drop.classList.remove("over");
+    });
+  });
+  drop.addEventListener("drop", function(e){
+    if(e.dataTransfer && e.dataTransfer.files){ addFiles(e.dataTransfer.files); }
+  });
+
+  // 設定変更で再描画
+  [dateEl, dateFmt, order, start, digits, sep, useFolder, useTypeFolder].forEach(function(el){
+    el.addEventListener("input", renderAll);
+    el.addEventListener("change", renderAll);
+  });
+
+  // ZIPダウンロード
+  zipBtn.addEventListener("click", function(){
+    if(files.length === 0) return;
+
+    var unset = files.filter(function(f){ return !f.teimei; }).length;
+    if(useFolder.checked && unset > 0){
+      if(!confirm("邸名が未設定のファイルが " + unset + " 件あります。\n「未設定」フォルダに入れてダウンロードしますか？")){
+        return;
+      }
+    }
+
+    zipBtn.disabled = true;
+    setStatus("ZIPを作成中…", false);
+
+    try{
+      var zip = new JSZip();
+      var numbers = computeNumbers();
+      files.forEach(function(item, i){
+        var p = buildPath(item.teimei, numbers[i], getExt(item.file.name));
+        zip.file(p.full, item.file);
+      });
+      zip.generateAsync({type:"blob"}).then(function(blob){
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "書類整理_" + formatDate() + ".zip";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+        setStatus("ダウンロードを開始しました（" + files.length + " 件）", false);
+        zipBtn.disabled = false;
+      }).catch(function(err){
+        console.error(err);
+        setStatus("ZIP作成に失敗しました。もう一度お試しください。", true);
+        zipBtn.disabled = false;
+      });
+    }catch(err){
+      console.error(err);
+      setStatus("ZIP作成に失敗しました。もう一度お試しください。", true);
+      zipBtn.disabled = false;
+    }
+  });
+
+  // ===== 保存先フォルダの記憶（IndexedDB） =====
+  function idbOpen(){
+    return new Promise(function(res, rej){
+      var r = indexedDB.open("renameApp", 1);
+      r.onupgradeneeded = function(){ r.result.createObjectStore("kv"); };
+      r.onsuccess = function(){ res(r.result); };
+      r.onerror = function(){ rej(r.error); };
+    });
+  }
+  function idbSet(key, val){
+    return idbOpen().then(function(db){
+      return new Promise(function(res, rej){
+        var tx = db.transaction("kv", "readwrite");
+        tx.objectStore("kv").put(val, key);
+        tx.oncomplete = function(){ res(); };
+        tx.onerror = function(){ rej(tx.error); };
+      });
+    });
+  }
+  function idbGet(key){
+    return idbOpen().then(function(db){
+      return new Promise(function(res, rej){
+        var tx = db.transaction("kv", "readonly");
+        var rq = tx.objectStore("kv").get(key);
+        rq.onsuccess = function(){ res(rq.result); };
+        rq.onerror = function(){ rej(rq.error); };
+      });
+    });
+  }
+
+  function showLastBtn(handle){
+    lastBtn.style.display = "";
+    lastBtn.textContent = "「" + handle.name + "」に保存";
+    lastBtn.title = "前回選んだフォルダ「" + handle.name + "」に直接保存します";
+  }
+
+  // 起動時：記憶済みフォルダがあればボタンを表示
+  (function(){
+    try{
+      idbGet("lastDir").then(function(handle){
+        if(handle && handle.name !== undefined){ showLastBtn(handle); }
+      }).catch(function(){ /* 記憶なし・非対応は無視 */ });
+    }catch(e){ /* IndexedDB非対応環境は無視 */ }
+  })();
+
+  function confirmUnset(){
+    var unset = files.filter(function(f){ return !f.teimei; }).length;
+    if(useFolder.checked && unset > 0){
+      return confirm("邸名が未設定のファイルが " + unset + " 件あります。\n「未設定」フォルダに入れて保存しますか？");
+    }
+    return true;
+  }
+
+  // 共通の書き込み処理
+  async function saveToDir(dirHandle){
+    saveBtn.disabled = true;
+    lastBtn.disabled = true;
+    zipBtn.disabled = true;
+    var numbers = computeNumbers();
+    var done = 0, failed = 0;
+
+    for(var i = 0; i < files.length; i++){
+      var item = files[i];
+      try{
+        var p = buildPath(item.teimei, numbers[i], getExt(item.file.name));
+        var target = dirHandle;
+        if(p.folder){
+          var segs = p.folder.split("/");
+          for(var s = 0; s < segs.length; s++){
+            target = await target.getDirectoryHandle(segs[s], {create:true});
+          }
+        }
+        var fh = await target.getFileHandle(p.name, {create:true});
+        var writable = await fh.createWritable();
+        await writable.write(item.file);
+        await writable.close();
+        done++;
+        setStatus("保存中… " + done + " / " + files.length, false);
+      }catch(err){
+        console.error(err);
+        failed++;
+      }
+    }
+
+    if(failed === 0){
+      setStatus("完了！ " + done + " 件を「" + dirHandle.name + "」に保存しました", false);
+    }else{
+      setStatus(done + " 件保存しました。" + failed + " 件は保存できませんでした。", true);
+    }
+    saveBtn.disabled = false;
+    lastBtn.disabled = false;
+    zipBtn.disabled = false;
+  }
+
+  // フォルダを選んで直接保存
+  saveBtn.addEventListener("click", async function(){
+    if(files.length === 0) return;
+    if(!confirmUnset()) return;
+
+    if(!window.showDirectoryPicker){
+      setStatus("このブラウザは直接保存に未対応です。Chrome / Edge でお使いいただくか、ZIPをご利用ください。", true);
+      return;
+    }
+
+    var dirHandle;
+    try{
+      dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    }catch(err){
+      if(err && err.name === "AbortError") return; // ユーザーがキャンセル
+      console.error(err);
+      setStatus("この画面ではフォルダ選択が開けません。HTMLファイルをダウンロードし、ダブルクリックで開いてからお試しください。", true);
+      return;
+    }
+
+    // 次回用にフォルダを記憶
+    try{
+      await idbSet("lastDir", dirHandle);
+      showLastBtn(dirHandle);
+    }catch(e){ /* 記憶できなくても保存は続行 */ }
+
+    await saveToDir(dirHandle);
+  });
+
+  // 前回のフォルダに保存
+  lastBtn.addEventListener("click", async function(){
+    if(files.length === 0) return;
+    if(!confirmUnset()) return;
+
+    var handle;
+    try{
+      handle = await idbGet("lastDir");
+    }catch(e){ handle = null; }
+
+    if(!handle){
+      setStatus("記憶されたフォルダが見つかりません。「フォルダを選んで直接保存」からやり直してください。", true);
+      return;
+    }
+
+    try{
+      var perm = await handle.queryPermission({ mode: "readwrite" });
+      if(perm !== "granted"){
+        perm = await handle.requestPermission({ mode: "readwrite" });
+      }
+      if(perm !== "granted"){
+        setStatus("フォルダへのアクセスが許可されませんでした。", true);
+        return;
+      }
+    }catch(err){
+      console.error(err);
+      setStatus("フォルダにアクセスできませんでした。「フォルダを選んで直接保存」からやり直してください。", true);
+      return;
+    }
+
+    await saveToDir(handle);
+  });
+
+  clearBtn.addEventListener("click", function(){
+    files = [];
+    setStatus("リストを空にしました", false);
+    renderAll();
+  });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
