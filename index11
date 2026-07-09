@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>書類一括リネーム＆フォルダ分け</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --ink:#1f2a44;
+    --ink-soft:#5a6580;
+    --paper:#f7f8f6;
+    --grid:#e3e7e0;
+    --line:#c9d0c5;
+    --accent:#b5342a;
+    --accent-soft:#f6e7e5;
+    --ok:#2e7d4f;
+    --mono:"Consolas","Menlo","MS Gothic",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"Yu Gothic UI","Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;
+    color:var(--ink);
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+      var(--paper);
+    background-size:24px 24px,24px 24px,auto;
+    min-height:100vh;
+    padding:24px 16px 64px;
+  }
+  .sheet{max-width:940px;margin:0 auto}
+
+  header{
+    border:2px solid var(--ink);
+    background:#fff;
+    display:flex;
+    align-items:stretch;
+    margin-bottom:20px;
+  }
+  .tb-main{flex:1;padding:16px 20px;border-right:2px solid var(--ink)}
+  .tb-main h1{
+    font-family:"Yu Mincho","Hiragino Mincho ProN",serif;
+    font-size:1.35rem;letter-spacing:.12em;
+  }
+  .tb-main p{font-size:.8rem;color:var(--ink-soft);margin-top:4px;letter-spacing:.05em}
+  .tb-stamp{
+    width:84px;display:flex;align-items:center;justify-content:center;
+    color:var(--accent);
+  }
+  .tb-stamp span{
+    border:2.5px solid var(--accent);border-radius:50%;
+    width:56px;height:56px;display:flex;align-items:center;justify-content:center;
+    font-family:"Yu Mincho",serif;font-size:.95rem;font-weight:700;
+    transform:rotate(-8deg);letter-spacing:.05em;
+  }
+
+  .card{
+    background:#fff;border:1px solid var(--line);
+    padding:20px;margin-bottom:16px;
+  }
+  .card h2{
+    font-size:.8rem;letter-spacing:.2em;color:var(--ink-soft);
+    border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:16px;
+    font-weight:600;
+  }
+
+  /* 分類レイヤー */
+  .layer{margin-bottom:18px}
+  .layer:last-child{margin-bottom:0}
+  .layer-title{
+    font-size:.82rem;font-weight:700;margin-bottom:8px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .layer-title .edit-label{
+    border:1px solid var(--line);background:#fff;color:var(--ink-soft);
+    font-size:.72rem;padding:3px 9px;cursor:pointer;font-family:inherit;
+  }
+  .layer-title .edit-label:hover{border-color:var(--ink);color:var(--ink)}
+  .layer-title .tag{
+    display:inline-block;background:var(--ink);color:#fff;
+    font-size:.68rem;padding:2px 8px;letter-spacing:.1em;font-weight:600;
+  }
+  .chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .chip{
+    display:inline-flex;align-items:center;gap:8px;
+    border:1.5px solid var(--ink);background:#fff;
+    padding:5px 8px 5px 12px;font-size:.87rem;font-weight:600;
+    cursor:pointer;user-select:none;
+  }
+  .chip:hover{background:var(--paper)}
+  .chip.active{background:var(--ink);color:#fff}
+  .chip.active button{color:#c8cede}
+  .chip button{
+    border:none;background:none;color:var(--ink-soft);cursor:pointer;
+    font-size:.95rem;line-height:1;padding:2px 3px;
+  }
+  .chip button:hover{color:var(--accent)}
+  .chip-add{display:inline-flex;gap:0}
+  .chip-add input{
+    width:110px;padding:5px 8px;border:1.5px dashed var(--ink-soft);
+    font-size:.83rem;font-family:inherit;border-radius:0;color:var(--ink);
+    border-right:none;
+  }
+  .chip-add input:focus{outline:none;border-color:var(--ink);border-style:solid}
+  .chip-add button{
+    border:1.5px dashed var(--ink-soft);border-left:none;background:#fff;
+    color:var(--ink-soft);padding:0 10px;cursor:pointer;font-size:.83rem;font-family:inherit;
+  }
+  .chip-add button:hover{color:var(--ink);border-color:var(--ink)}
+  .active-hint{
+    margin-top:14px;font-size:.85rem;color:var(--accent);font-weight:600;
+  }
+
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
+  .field label{display:block;font-size:.78rem;color:var(--ink-soft);margin-bottom:5px;letter-spacing:.05em}
+  .field input,.field select{
+    width:100%;padding:9px 10px;border:1px solid var(--line);
+    font-size:.95rem;font-family:inherit;background:#fff;color:var(--ink);border-radius:0;
+  }
+  .field input:focus,.field select:focus{outline:2px solid var(--ink);outline-offset:1px}
+
+  .name-preview{
+    margin-top:14px;padding:14px 16px;background:var(--paper);
+    border:1px dashed var(--ink-soft);
+    font-family:var(--mono);font-size:1rem;word-break:break-all;
+  }
+  .name-preview .lbl{
+    display:block;font-family:"Yu Gothic UI",sans-serif;
+    font-size:.72rem;color:var(--ink-soft);margin-bottom:6px;letter-spacing:.15em;
+  }
+  .name-preview .folder{color:var(--accent);font-weight:700}
+
+  .drop{
+    border:2px dashed var(--ink-soft);background:#fff;
+    padding:34px 20px;text-align:center;cursor:pointer;
+    transition:background .15s,border-color .15s;
+  }
+  .drop:hover,.drop:focus-visible{border-color:var(--ink);background:var(--paper)}
+  .drop.over{border-color:var(--accent);background:var(--accent-soft)}
+  .drop p{font-size:.98rem}
+  .drop small{display:block;margin-top:6px;color:var(--ink-soft);font-size:.78rem}
+  .drop:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+  .src-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+
+  .picker{margin-top:14px;border:1.5px solid var(--ink);background:#fff}
+  .picker-head{
+    display:flex;align-items:center;gap:16px;
+    padding:10px 14px;border-bottom:1px solid var(--line);
+    background:var(--paper);font-size:.85rem;
+  }
+  .picker-head label{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600}
+  .picker-head input{width:16px;height:16px;accent-color:var(--accent)}
+  .picker-head span{color:var(--ink-soft);font-size:.8rem}
+  .picker-list{max-height:300px;overflow-y:auto}
+  .pick-row{
+    display:flex;align-items:center;gap:12px;
+    padding:8px 14px;border-bottom:1px solid var(--grid);
+    font-size:.86rem;cursor:pointer;
+  }
+  .pick-row:hover{background:var(--paper)}
+  .pick-row input{width:16px;height:16px;accent-color:var(--accent);flex-shrink:0}
+  .pick-row .pname{flex:1;word-break:break-all}
+  .pick-row .pdate{color:var(--ink-soft);font-size:.76rem;font-family:var(--mono);white-space:nowrap}
+  .picker-foot{
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    padding:12px 14px;border-top:1px solid var(--line);
+  }
+  .picker-foot .btn-primary{padding:10px 20px;font-size:.9rem}
+  .picker-foot .btn-sub{padding:9px 14px}
+
+  table{width:100%;border-collapse:collapse;font-size:.83rem}
+  th{
+    text-align:left;font-size:.7rem;letter-spacing:.1em;color:var(--ink-soft);
+    border-bottom:1px solid var(--ink);padding:6px 6px;font-weight:600;
+  }
+  td{border-bottom:1px solid var(--grid);padding:7px 6px;vertical-align:middle}
+  td.no{width:30px;color:var(--ink-soft);font-family:var(--mono)}
+  td.old{color:var(--ink-soft);word-break:break-all;font-size:.78rem}
+  td.sel select{
+    padding:5px 6px;border:1px solid var(--line);font-family:inherit;
+    font-size:.8rem;background:#fff;color:var(--ink);max-width:110px;border-radius:0;
+  }
+  td.sel select.auto{border-color:var(--ok)}
+  td.sel select.unset{border-color:var(--accent);background:var(--accent-soft)}
+  td.new{font-family:var(--mono);word-break:break-all;font-weight:600;font-size:.78rem}
+  td.new .folder{color:var(--accent)}
+  td.ctrl{width:100px;white-space:nowrap;text-align:right}
+  .mini{
+    border:1px solid var(--line);background:#fff;color:var(--ink);
+    width:27px;height:27px;cursor:pointer;font-size:.8rem;margin-left:3px;
+  }
+  .mini:hover{border-color:var(--ink)}
+  .mini.del:hover{border-color:var(--accent);color:var(--accent)}
+  .mini:disabled{opacity:.3;cursor:default}
+  .empty{color:var(--ink-soft);font-size:.85rem;text-align:center;padding:22px 0}
+
+  .actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:18px}
+  .btn-primary{
+    background:var(--accent);color:#fff;border:none;
+    padding:13px 26px;font-size:1rem;font-family:inherit;
+    letter-spacing:.1em;cursor:pointer;font-weight:600;
+  }
+  .btn-primary:hover{background:#9c2b22}
+  .btn-primary:disabled{background:#c9c9c9;cursor:default}
+  .btn-sub{
+    background:#fff;border:1px solid var(--ink);color:var(--ink);
+    padding:12px 18px;font-size:.88rem;font-family:inherit;cursor:pointer;
+  }
+  .btn-sub:hover{background:var(--paper)}
+  .btn-sub:disabled{opacity:.4;cursor:default}
+  .status{font-size:.85rem;color:var(--ok);font-weight:600}
+  .status.err{color:var(--accent)}
+
+  @media(max-width:640px){
+    td.old,th.old{display:none}
+    .tb-stamp{display:none}
+    .tb-main{border-right:none}
+    td.sel select{max-width:88px}
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <div class="tb-main">
+      <h1>書類一括リネーム＆フォルダ分け</h1>
+      <p>日付 → 分類 → 業者・部位 → 種類 の4階層に自動整理｜処理はこの画面内で完結</p>
+    </div>
+    <div class="tb-stamp"><span>整理</span></div>
+  </header>
+
+  <section class="card">
+    <h2>01｜分類の選択（クリックで選択 → その状態で追加したファイルに適用）</h2>
+
+    <div class="layer">
+      <div class="layer-title"><span class="tag">第2層</span><span id="nameL2">分類</span><button class="edit-label" data-layer="l2">名前を変更</button></div>
+      <div class="chips" id="chipsL2"></div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-title"><span class="tag">第3層</span><span id="nameL3">業者・部位</span><button class="edit-label" data-layer="l3">名前を変更</button></div>
+      <div class="chips" id="chipsL3"></div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-title"><span class="tag">第4層</span><span id="nameL4">種類</span><button class="edit-label" data-layer="l4">名前を変更</button></div>
+      <div class="chips" id="chipsL4"></div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-title"><span class="tag">第5層</span><span id="nameL5">詳細</span><button class="edit-label" data-layer="l5">名前を変更</button></div>
+      <div class="chips" id="chipsL5"></div>
+    </div>
+
+    <p class="active-hint" id="activeHint" style="display:none"></p>
+  </section>
+
+  <section class="card">
+    <h2>02｜日付・ファイル名のルール</h2>
+    <div class="form-grid">
+      <div class="field">
+        <label for="date">日付（第1層のフォルダ名になります）</label>
+        <input type="date" id="date">
+      </div>
+      <div class="field">
+        <label for="dateFmt">日付の形式</label>
+        <select id="dateFmt">
+          <option value="YYYYMMDD">20260709</option>
+          <option value="YYYY-MM-DD">2026-07-09</option>
+          <option value="YYMMDD">260709</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="order">ファイル名の並び順</label>
+        <select id="order">
+          <option value="t-d-n">業者・部位 → 日付 → 連番</option>
+          <option value="d-t-n">日付 → 業者・部位 → 連番</option>
+          <option value="t-n-d">業者・部位 → 連番 → 日付</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="start">連番の開始</label>
+        <input type="number" id="start" value="1" min="0">
+      </div>
+      <div class="field">
+        <label for="digits">連番の桁数</label>
+        <select id="digits">
+          <option value="2">2桁（01）</option>
+          <option value="3" selected>3桁（001）</option>
+          <option value="4">4桁（0001）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sep">区切り文字</label>
+        <select id="sep">
+          <option value="_">アンダーバー（_）</option>
+          <option value="-">ハイフン（-）</option>
+        </select>
+      </div>
+    </div>
+    <p style="font-size:.78rem;color:var(--ink-soft);margin-top:12px">※ 連番は保存先フォルダごとに開始番号からリセットされます。未選択の層はフォルダを作らず飛ばします。</p>
+    <div class="name-preview">
+      <span class="lbl">仕上がりイメージ</span>
+      <span id="previewText"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>03｜ファイル</h2>
+    <div class="drop" id="drop" role="button" tabindex="0" aria-label="ファイルを選択">
+      <p>ここにファイルをドラッグ＆ドロップ</p>
+      <small id="dropHint">PDF・写真・Excel・Wordなど何でもOK（複数可）。ファイル名に「ヨシタニ」「見積」などが含まれていれば自動判定します</small>
+      <input type="file" id="fileInput" multiple hidden>
+    </div>
+
+    <div class="src-row">
+      <button class="btn-sub" id="lastSrcBtn" style="display:none"></button>
+      <button class="btn-sub" id="srcBtn">フォルダから読み込む（例：ダウンロード）</button>
+    </div>
+
+    <div class="picker" id="picker" style="display:none">
+      <div class="picker-head">
+        <label><input type="checkbox" id="pickAll"> すべて選択</label>
+        <span id="pickerTitle"></span>
+      </div>
+      <div class="picker-list" id="pickerList"></div>
+      <div class="picker-foot">
+        <button class="btn-primary" id="pickAdd">選択したファイルを追加</button>
+        <button class="btn-sub" id="pickCancel">閉じる</button>
+        <span class="status" id="pickCount"></span>
+      </div>
+    </div>
+
+    <div style="margin-top:16px">
+      <table id="fileTable" style="display:none">
+        <thead>
+          <tr>
+            <th>No.</th>
+            <th class="old">元のファイル名</th>
+            <th id="thL2">分類</th>
+            <th id="thL3">業者・部位</th>
+            <th id="thL4">種類</th>
+            <th id="thL5">詳細</th>
+            <th>新しい保存先・ファイル名</th>
+            <th style="text-align:right"></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <p class="empty" id="emptyMsg">まだファイルがありません。上のエリアに追加してください。</p>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="lastBtn" style="display:none"></button>
+      <button class="btn-primary" id="saveBtn" disabled>フォルダを選んで直接保存</button>
+      <button class="btn-sub" id="zipBtn" disabled>ZIPでダウンロード</button>
+      <button class="btn-sub" id="clearBtn" disabled>リストを空にする</button>
+      <span class="status" id="status"></span>
+    </div>
+    <p style="font-size:.78rem;color:var(--ink-soft);margin-top:10px" id="saveHint">
+      「直接保存」は保存先フォルダを選ぶと、その中に日付・分類のフォルダを作ってリネーム済みファイルを書き込みます（Chrome / Edge対応）。一度保存すると次回から「前回のフォルダに保存」でワンクリック保存できます。Googleドライブ（パソコン版）のフォルダを選べば、自動でクラウドにも同期されます。
+    </p>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ===== 分類の定義（親子関係つき。項目も層の名前も自由に変更でき、ブラウザに記憶されます） =====
+  // parents: null = どの選択でも表示される「共通」項目
+  // parents: ["メーカー"] = 上の層で「メーカー」を選んだときだけ表示
+  var LAYERS = [
+    { key:"l2", label:"分類", items:[
+      {name:"メーカー", parents:null},
+      {name:"仕様書",   parents:null},
+      {name:"見積",     parents:null}
+    ]},
+    { key:"l3", label:"業者・部位", items:[
+      {name:"建具",     parents:["仕様書","見積"]},
+      {name:"水廻り",   parents:["仕様書","見積"]},
+      {name:"その他",   parents:["仕様書","見積"]},
+      {name:"ヨシタニ", parents:["メーカー"]},
+      {name:"丸栄木材", parents:["メーカー"]},
+      {name:"川根塗装", parents:["メーカー"]},
+      {name:"大松",     parents:["メーカー"]},
+      {name:"高柴",     parents:["メーカー"]}
+    ]},
+    { key:"l4", label:"種類", items:[
+      {name:"見積", parents:null},
+      {name:"図面", parents:null},
+      {name:"PB",   parents:null}
+    ]},
+    { key:"l5", label:"詳細", items:[] }
+  ];
+  var LAYER_ORDER = ["l2","l3","l4","l5"];
+  function prevKey(key){
+    var i = LAYER_ORDER.indexOf(key);
+    return i > 0 ? LAYER_ORDER[i-1] : null;
+  }
+  function getLayer(key){
+    return LAYERS.filter(function(L){ return L.key === key; })[0];
+  }
+  // その層で表示する項目（親の選択値に応じて絞り込み）
+  function visibleItems(key, parentVal){
+    return getLayer(key).items.filter(function(it){
+      if(!it.parents) return true;                      // 共通項目は常に表示
+      return parentVal && it.parents.indexOf(parentVal) !== -1;
+    });
+  }
+  function itemNames(list){
+    return list.map(function(it){ return it.name; });
+  }
+  // 選択チェーンの整合性を保つ（上の層を変えたら、合わない下の層はクリア）
+  function validateChain(obj){
+    for(var i=1; i<LAYER_ORDER.length; i++){
+      var key = LAYER_ORDER[i];
+      var pv = obj[LAYER_ORDER[i-1]];
+      if(obj[key]){
+        var ok = itemNames(visibleItems(key, pv)).indexOf(obj[key]) !== -1;
+        if(!ok){ obj[key] = null; }
+      }
+    }
+  }
+  var active = { l2:null, l3:null, l4:null, l5:null };   // 選択中の値
+  var files = [];  // {file:File, l2, l3, l4, l5, auto:{...}}
+
+  var $ = function(id){ return document.getElementById(id); };
+  var chipEls = { l2:$("chipsL2"), l3:$("chipsL3"), l4:$("chipsL4"), l5:$("chipsL5") };
+  var nameEls = { l2:$("nameL2"), l3:$("nameL3"), l4:$("nameL4"), l5:$("nameL5") };
+  var thEls = { l2:$("thL2"), l3:$("thL3"), l4:$("thL4"), l5:$("thL5") };
+  var activeHint = $("activeHint"), dropHint = $("dropHint"),
+      dateEl = $("date"), dateFmt = $("dateFmt"),
+      order = $("order"), start = $("start"), digits = $("digits"), sep = $("sep"),
+      drop = $("drop"), fileInput = $("fileInput"), tbody = $("tbody"),
+      table = $("fileTable"), emptyMsg = $("emptyMsg"),
+      zipBtn = $("zipBtn"), saveBtn = $("saveBtn"), lastBtn = $("lastBtn"), clearBtn = $("clearBtn"), statusEl = $("status"),
+      srcBtn = $("srcBtn"), lastSrcBtn = $("lastSrcBtn"),
+      picker = $("picker"), pickerList = $("pickerList"), pickerTitle = $("pickerTitle"),
+      pickAll = $("pickAll"), pickAdd = $("pickAdd"), pickCancel = $("pickCancel"), pickCount = $("pickCount"),
+      previewText = $("previewText");
+
+  (function(){
+    var d = new Date();
+    var m = ("0"+(d.getMonth()+1)).slice(-2);
+    var day = ("0"+d.getDate()).slice(-2);
+    dateEl.value = d.getFullYear()+"-"+m+"-"+day;
+  })();
+
+  function sanitize(s){
+    return s.replace(/[\\\/:*?"<>|]/g, "").trim();
+  }
+
+  function formatDate(){
+    var v = dateEl.value;
+    if(!v) return "";
+    var p = v.split("-");
+    var fmt = dateFmt.value;
+    if(fmt === "YYYYMMDD") return p[0]+p[1]+p[2];
+    if(fmt === "YYMMDD") return p[0].slice(2)+p[1]+p[2];
+    return v;
+  }
+
+  function pad(n){
+    var s = String(n);
+    var dg = parseInt(digits.value,10);
+    while(s.length < dg){ s = "0"+s; }
+    return s;
+  }
+
+  function getExt(fileName){
+    var m = fileName.match(/\.[A-Za-z0-9]+$/);
+    return m ? m[0].toLowerCase() : "";
+  }
+
+  // フォルダのパス（日付/分類/業者・部位/種類/詳細）。未選択の層は飛ばす
+  function folderSegs(item){
+    var segs = [];
+    var d = formatDate();
+    if(d) segs.push(d);
+    if(item.l2) segs.push(sanitize(item.l2));
+    if(item.l3) segs.push(sanitize(item.l3));
+    if(item.l4) segs.push(sanitize(item.l4));
+    if(item.l5) segs.push(sanitize(item.l5));
+    return segs;
+  }
+
+  // ファイル名（業者・部位を名前に使用）
+  function buildFileName(item, num, ext){
+    var s = sep.value;
+    var t = sanitize(item.l3 || item.l2 || "");
+    var d = formatDate();
+    var numStr = pad(num);
+    var parts;
+    switch(order.value){
+      case "d-t-n": parts = [d, t, numStr]; break;
+      case "t-n-d": parts = [t, numStr, d]; break;
+      default:      parts = [t, d, numStr];
+    }
+    parts = parts.filter(function(x){ return x !== ""; });
+    return parts.join(s) + (ext || "");
+  }
+
+  function buildPath(item, num, ext){
+    var name = buildFileName(item, num, ext);
+    var segs = folderSegs(item);
+    if(segs.length){
+      var folder = segs.join("/");
+      return {folder: folder, name: name, full: folder + "/" + name};
+    }
+    return {folder: null, name: name, full: name};
+  }
+
+  // フォルダごとに連番をリセット
+  function computeNumbers(){
+    var base = parseInt(start.value,10)||0;
+    var counters = {};
+    return files.map(function(item){
+      var key = folderSegs(item).join("/") || "__all__";
+      if(counters[key] === undefined){ counters[key] = base; }
+      var n = counters[key];
+      counters[key]++;
+      return n;
+    });
+  }
+
+  // ファイル名から各層を自動判定（長い項目名を優先）
+  function detectLayer(layerKey, fileName){
+    var names = itemNames(getLayer(layerKey).items);
+    var sorted = names.slice().sort(function(a,b){ return b.length - a.length; });
+    for(var i=0;i<sorted.length;i++){
+      if(fileName.indexOf(sorted[i]) !== -1) return sorted[i];
+    }
+    return null;
+  }
+
+  function escapeHtml(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  // ===== 分類チップの描画 =====
+  function renderChips(){
+    LAYERS.forEach(function(L){
+      nameEls[L.key].textContent = L.label;
+      thEls[L.key].textContent = L.label;
+      var wrap = chipEls[L.key];
+      wrap.innerHTML = "";
+
+      var pk = prevKey(L.key);
+      var parentVal = pk ? active[pk] : "";
+      var visible = visibleItems(L.key, parentVal);
+
+      // 上の層が未選択で隠れている項目がある場合の案内
+      if(visible.length === 0 && L.items.length > 0 && pk){
+        var note = document.createElement("span");
+        note.style.cssText = "font-size:.8rem;color:var(--ink-soft);";
+        note.textContent = "↑ " + getLayer(pk).label + "を選ぶと項目が表示されます";
+        wrap.appendChild(note);
+      }
+
+      visible.forEach(function(it){
+        var t = it.name;
+        var chip = document.createElement("span");
+        chip.className = "chip" + (active[L.key] === t ? " active" : "");
+        chip.title = it.parents ? ("「" + it.parents.join("・") + "」配下の項目" ) : "共通項目（常に表示）";
+        var label = document.createElement("span");
+        label.textContent = t;
+        var del = document.createElement("button");
+        del.textContent = "×";
+        del.title = t + " を削除";
+        del.onclick = function(e){
+          e.stopPropagation();
+          if(!confirm("「" + t + "」を一覧から削除しますか？")) return;
+          var idx = L.items.indexOf(it);
+          if(idx !== -1){ L.items.splice(idx,1); }
+          if(active[L.key] === t){ active[L.key] = null; }
+          files.forEach(function(f){
+            if(f[L.key] === t){ f[L.key] = null; }
+          });
+          validateChain(active);
+          files.forEach(validateChain);
+          saveLayers();
+          renderAll();
+        };
+        chip.onclick = function(){
+          active[L.key] = (active[L.key] === t) ? null : t;
+          validateChain(active);
+          renderAll();
+        };
+        chip.appendChild(label); chip.appendChild(del);
+        wrap.appendChild(chip);
+      });
+
+      // 追加用の入力（上の層で選択中の項目の配下に追加される）
+      var add = document.createElement("span");
+      add.className = "chip-add";
+      var input = document.createElement("input");
+      input.type = "text";
+      if(pk && active[pk]){
+        input.placeholder = "＋「" + active[pk] + "」に追加";
+        input.title = "「" + active[pk] + "」を選んだときだけ表示される項目として追加します";
+      }else{
+        input.placeholder = "＋追加（共通）";
+        input.title = "どの選択でも表示される共通項目として追加します";
+      }
+      var btn = document.createElement("button");
+      btn.textContent = "追加";
+      function doAdd(){
+        var v = sanitize(input.value);
+        if(!v) return;
+        var parentVal2 = pk ? active[pk] : null;
+        // 同じ親のもとに同名があれば拒否
+        var dup = L.items.some(function(it){
+          if(it.name !== v) return false;
+          if(!it.parents && !parentVal2) return true;
+          if(it.parents && parentVal2 && it.parents.indexOf(parentVal2) !== -1) return true;
+          return false;
+        });
+        if(dup){
+          setStatus("「" + v + "」はすでにあります", true);
+          return;
+        }
+        // 同名の共通/別親項目があれば親を追記、なければ新規
+        var existing = L.items.filter(function(it){ return it.name === v && it.parents; })[0];
+        if(existing && parentVal2){
+          existing.parents.push(parentVal2);
+        }else{
+          L.items.push({ name:v, parents: parentVal2 ? [parentVal2] : null });
+        }
+        active[L.key] = v;
+        saveLayers();
+        renderAll();
+      }
+      btn.onclick = doAdd;
+      input.onkeydown = function(e){
+        if(e.key === "Enter"){ e.preventDefault(); doAdd(); }
+      };
+      add.appendChild(input); add.appendChild(btn);
+      wrap.appendChild(add);
+    });
+
+    // 選択状態のヒント
+    var sel = [active.l2, active.l3, active.l4, active.l5].filter(Boolean);
+    if(sel.length){
+      activeHint.style.display = "block";
+      activeHint.textContent = "★ 選択中：追加するファイルは「" + formatDate() + " / " + sel.join(" / ") + "」に入ります";
+      dropHint.textContent = "追加したファイルは「" + sel.join(" / ") + "」に振り分けられます";
+    }else{
+      activeHint.style.display = "none";
+      dropHint.textContent = "PDF・写真・Excel・Wordなど何でもOK（複数可）。ファイル名に「ヨシタニ」「見積」などが含まれていれば自動判定します";
+    }
+  }
+
+  function renderPreview(){
+    var sample = {
+      l2: active.l2 || "メーカー",
+      l3: active.l3 || "ヨシタニ",
+      l4: active.l4 || "見積",
+      l5: active.l5 || null
+    };
+    var sampleExt = files.length ? getExt(files[0].file.name) : ".pdf";
+    var p = buildPath(sample, parseInt(start.value,10)||0, sampleExt);
+    if(p.folder){
+      previewText.innerHTML = '<span class="folder">' + escapeHtml(p.folder) + '/</span>' + escapeHtml(p.name);
+    }else{
+      previewText.textContent = p.name;
+    }
+  }
+
+  function makeLayerSelect(item, layerKey){
+    var select = document.createElement("select");
+    if(item.auto && item.auto[layerKey]){ select.className = "auto"; select.title = "ファイル名から自動判定"; }
+    if(!item[layerKey]){ select.className = "unset"; }
+    var optNone = document.createElement("option");
+    optNone.value = ""; optNone.textContent = "（なし）";
+    select.appendChild(optNone);
+
+    var pk = prevKey(layerKey);
+    var parentVal = pk ? item[pk] : "";
+    var names = itemNames(visibleItems(layerKey, parentVal));
+    // 現在の値がフィルタ外でも選択肢に残す（値を失わないように）
+    if(item[layerKey] && names.indexOf(item[layerKey]) === -1){
+      names.push(item[layerKey]);
+    }
+    names.forEach(function(t){
+      var opt = document.createElement("option");
+      opt.value = t; opt.textContent = t;
+      if(item[layerKey] === t) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.onchange = function(){
+      item[layerKey] = select.value || null;
+      if(item.auto){ item.auto[layerKey] = false; }
+      validateChain(item);   // 上の層を変えたら合わない下の層をクリア
+      renderAll();
+    };
+    return select;
+  }
+
+  function renderTable(){
+    tbody.innerHTML = "";
+    var has = files.length > 0;
+    table.style.display = has ? "table" : "none";
+    emptyMsg.style.display = has ? "none" : "block";
+    zipBtn.disabled = !has;
+    saveBtn.disabled = !has;
+    lastBtn.disabled = !has;
+    clearBtn.disabled = !has;
+
+    var numbers = computeNumbers();
+
+    files.forEach(function(item, i){
+      var tr = document.createElement("tr");
+
+      var tdNo = document.createElement("td");
+      tdNo.className = "no";
+      tdNo.textContent = i+1;
+
+      var tdOld = document.createElement("td");
+      tdOld.className = "old";
+      tdOld.textContent = item.file.name;
+
+      var tdL2 = document.createElement("td");
+      tdL2.className = "sel";
+      tdL2.appendChild(makeLayerSelect(item, "l2"));
+
+      var tdL3 = document.createElement("td");
+      tdL3.className = "sel";
+      tdL3.appendChild(makeLayerSelect(item, "l3"));
+
+      var tdL4 = document.createElement("td");
+      tdL4.className = "sel";
+      tdL4.appendChild(makeLayerSelect(item, "l4"));
+
+      var tdL5 = document.createElement("td");
+      tdL5.className = "sel";
+      tdL5.appendChild(makeLayerSelect(item, "l5"));
+
+      var tdNew = document.createElement("td");
+      tdNew.className = "new";
+      var p = buildPath(item, numbers[i], getExt(item.file.name));
+      if(p.folder){
+        tdNew.innerHTML = '<span class="folder">' + escapeHtml(p.folder) + '/</span>' + escapeHtml(p.name);
+      }else{
+        tdNew.textContent = p.name;
+      }
+
+      var tdCtrl = document.createElement("td");
+      tdCtrl.className = "ctrl";
+      var up = document.createElement("button");
+      up.className = "mini"; up.textContent = "↑"; up.title = "上へ";
+      up.disabled = (i === 0);
+      up.onclick = function(){ var t=files[i-1]; files[i-1]=files[i]; files[i]=t; renderAll(); };
+      var down = document.createElement("button");
+      down.className = "mini"; down.textContent = "↓"; down.title = "下へ";
+      down.disabled = (i === files.length-1);
+      down.onclick = function(){ var t=files[i+1]; files[i+1]=files[i]; files[i]=t; renderAll(); };
+      var del = document.createElement("button");
+      del.className = "mini del"; del.textContent = "×"; del.title = "削除";
+      del.onclick = function(){ files.splice(i,1); renderAll(); };
+      tdCtrl.appendChild(up); tdCtrl.appendChild(down); tdCtrl.appendChild(del);
+
+      tr.appendChild(tdNo); tr.appendChild(tdOld);
+      tr.appendChild(tdL2); tr.appendChild(tdL3); tr.appendChild(tdL4); tr.appendChild(tdL5);
+      tr.appendChild(tdNew); tr.appendChild(tdCtrl);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderAll(){
+    renderChips();
+    renderTable();
+    renderPreview();
+  }
+
+  function addFiles(list){
+    var added = 0;
+    Array.prototype.forEach.call(list, function(f){
+      var item = {file:f, l2:null, l3:null, l4:null, l5:null, auto:{l2:false,l3:false,l4:false,l5:false}};
+      LAYERS.forEach(function(L){
+        if(active[L.key]){
+          item[L.key] = active[L.key];
+        }else{
+          var d = detectLayer(L.key, f.name);
+          if(d){ item[L.key] = d; item.auto[L.key] = true; }
+        }
+      });
+      files.push(item);
+      validateChain(item);
+      added++;
+    });
+    var sel = [active.l2, active.l3, active.l4, active.l5].filter(Boolean);
+    var msg = added + " 件追加";
+    if(sel.length){ msg += "（「" + sel.join(" / ") + "」に設定）"; }
+    setStatus(msg, false);
+    renderAll();
+  }
+
+  function setStatus(msg, isErr){
+    statusEl.textContent = msg;
+    statusEl.className = "status" + (isErr ? " err" : "");
+    if(msg){
+      clearTimeout(setStatus._t);
+      setStatus._t = setTimeout(function(){ statusEl.textContent=""; }, 6000);
+    }
+  }
+
+  // ===== ドロップゾーン =====
+  drop.addEventListener("click", function(){ fileInput.click(); });
+  drop.addEventListener("keydown", function(e){
+    if(e.key === "Enter" || e.key === " "){ e.preventDefault(); fileInput.click(); }
+  });
+  fileInput.addEventListener("change", function(){
+    addFiles(fileInput.files);
+    fileInput.value = "";
+  });
+  ["dragenter","dragover"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){
+      e.preventDefault(); e.stopPropagation();
+      drop.classList.add("over");
+    });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){
+      e.preventDefault(); e.stopPropagation();
+      drop.classList.remove("over");
+    });
+  });
+  drop.addEventListener("drop", function(e){
+    if(e.dataTransfer && e.dataTransfer.files){ addFiles(e.dataTransfer.files); }
+  });
+
+  [dateEl, dateFmt, order, start, digits, sep].forEach(function(el){
+    el.addEventListener("input", renderAll);
+    el.addEventListener("change", renderAll);
+  });
+
+  // ===== 保存先フォルダの記憶（IndexedDB） =====
+  function idbOpen(){
+    return new Promise(function(res, rej){
+      var r = indexedDB.open("renameApp", 1);
+      r.onupgradeneeded = function(){ r.result.createObjectStore("kv"); };
+      r.onsuccess = function(){ res(r.result); };
+      r.onerror = function(){ rej(r.error); };
+    });
+  }
+  function idbSet(key, val){
+    return idbOpen().then(function(db){
+      return new Promise(function(res, rej){
+        var tx = db.transaction("kv", "readwrite");
+        tx.objectStore("kv").put(val, key);
+        tx.oncomplete = function(){ res(); };
+        tx.onerror = function(){ rej(tx.error); };
+      });
+    });
+  }
+  function idbGet(key){
+    return idbOpen().then(function(db){
+      return new Promise(function(res, rej){
+        var tx = db.transaction("kv", "readonly");
+        var rq = tx.objectStore("kv").get(key);
+        rq.onsuccess = function(){ res(rq.result); };
+        rq.onerror = function(){ rej(rq.error); };
+      });
+    });
+  }
+
+  function showLastBtn(handle){
+    lastBtn.style.display = "";
+    lastBtn.textContent = "「" + handle.name + "」に保存";
+    lastBtn.title = "前回選んだフォルダ「" + handle.name + "」に直接保存します";
+  }
+
+  (function(){
+    try{
+      idbGet("lastDir").then(function(handle){
+        if(handle && handle.name !== undefined){ showLastBtn(handle); }
+      }).catch(function(){});
+    }catch(e){}
+  })();
+
+  function confirmUnset(){
+    var unset = files.filter(function(f){ return !f.l2 && !f.l3 && !f.l4 && !f.l5; }).length;
+    if(unset > 0){
+      return confirm("分類がすべて未設定のファイルが " + unset + " 件あります。\n日付フォルダの直下に入りますが、よろしいですか？");
+    }
+    return true;
+  }
+
+  async function saveToDir(dirHandle){
+    saveBtn.disabled = true;
+    lastBtn.disabled = true;
+    zipBtn.disabled = true;
+    var numbers = computeNumbers();
+    var done = 0, failed = 0;
+
+    for(var i = 0; i < files.length; i++){
+      var item = files[i];
+      try{
+        var p = buildPath(item, numbers[i], getExt(item.file.name));
+        var target = dirHandle;
+        if(p.folder){
+          var segs = p.folder.split("/");
+          for(var s = 0; s < segs.length; s++){
+            target = await target.getDirectoryHandle(segs[s], {create:true});
+          }
+        }
+        var fh = await target.getFileHandle(p.name, {create:true});
+        var writable = await fh.createWritable();
+        await writable.write(item.file);
+        await writable.close();
+        done++;
+        setStatus("保存中… " + done + " / " + files.length, false);
+      }catch(err){
+        console.error(err);
+        failed++;
+      }
+    }
+
+    if(failed === 0){
+      setStatus("完了！ " + done + " 件を「" + dirHandle.name + "」に保存しました", false);
+    }else{
+      setStatus(done + " 件保存しました。" + failed + " 件は保存できませんでした。", true);
+    }
+    saveBtn.disabled = false;
+    lastBtn.disabled = false;
+    zipBtn.disabled = false;
+  }
+
+  saveBtn.addEventListener("click", async function(){
+    if(files.length === 0) return;
+    if(!confirmUnset()) return;
+
+    if(!window.showDirectoryPicker){
+      setStatus("このブラウザは直接保存に未対応です。Chrome / Edge でお使いいただくか、ZIPをご利用ください。", true);
+      return;
+    }
+
+    var dirHandle;
+    try{
+      dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    }catch(err){
+      if(err && err.name === "AbortError") return;
+      console.error(err);
+      setStatus("この画面ではフォルダ選択が開けません。デプロイしたURLからお試しください。", true);
+      return;
+    }
+
+    try{
+      await idbSet("lastDir", dirHandle);
+      showLastBtn(dirHandle);
+    }catch(e){}
+
+    await saveToDir(dirHandle);
+  });
+
+  lastBtn.addEventListener("click", async function(){
+    if(files.length === 0) return;
+    if(!confirmUnset()) return;
+
+    var handle;
+    try{ handle = await idbGet("lastDir"); }catch(e){ handle = null; }
+    if(!handle){
+      setStatus("記憶されたフォルダが見つかりません。「フォルダを選んで直接保存」からやり直してください。", true);
+      return;
+    }
+    try{
+      var perm = await handle.queryPermission({ mode: "readwrite" });
+      if(perm !== "granted"){
+        perm = await handle.requestPermission({ mode: "readwrite" });
+      }
+      if(perm !== "granted"){
+        setStatus("フォルダへのアクセスが許可されませんでした。", true);
+        return;
+      }
+    }catch(err){
+      console.error(err);
+      setStatus("フォルダにアクセスできませんでした。「フォルダを選んで直接保存」からやり直してください。", true);
+      return;
+    }
+    await saveToDir(handle);
+  });
+
+  // ===== フォルダからファイルを読み込む =====
+  var pickerFiles = [];
+  var currentSrcName = "";
+
+  function showLastSrcBtn(handle){
+    lastSrcBtn.style.display = "";
+    lastSrcBtn.textContent = "「" + handle.name + "」から読み込む";
+    lastSrcBtn.title = "前回選んだフォルダ「" + handle.name + "」の中身を一覧表示します";
+  }
+
+  (function(){
+    try{
+      idbGet("srcDir").then(function(handle){
+        if(handle && handle.name !== undefined){ showLastSrcBtn(handle); }
+      }).catch(function(){});
+    }catch(e){}
+  })();
+
+  function fmtDate(ms){
+    var d = new Date(ms);
+    var m = ("0"+(d.getMonth()+1)).slice(-2);
+    var day = ("0"+d.getDate()).slice(-2);
+    var h = ("0"+d.getHours()).slice(-2);
+    var mi = ("0"+d.getMinutes()).slice(-2);
+    return d.getFullYear()+"/"+m+"/"+day+" "+h+":"+mi;
+  }
+
+  function renderPicker(folderName){
+    currentSrcName = folderName;
+    pickerList.innerHTML = "";
+    pickerTitle.textContent = "「" + folderName + "」内 " + pickerFiles.length + " 件（新しい順）";
+    pickerFiles.forEach(function(item){
+      var row = document.createElement("label");
+      row.className = "pick-row";
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = item.checked;
+      cb.onchange = function(){
+        item.checked = cb.checked;
+        updatePickCount();
+      };
+      var name = document.createElement("span");
+      name.className = "pname";
+      name.textContent = item.file.name;
+      var date = document.createElement("span");
+      date.className = "pdate";
+      date.textContent = fmtDate(item.file.lastModified);
+      row.appendChild(cb); row.appendChild(name); row.appendChild(date);
+      pickerList.appendChild(row);
+    });
+    updatePickCount();
+    picker.style.display = "block";
+  }
+
+  function updatePickCount(){
+    var n = pickerFiles.filter(function(p){ return p.checked; }).length;
+    pickCount.textContent = n ? n + " 件選択中" : "";
+    pickAll.checked = pickerFiles.length > 0 && n === pickerFiles.length;
+  }
+
+  async function loadFolderFiles(handle){
+    var list = [];
+    try{
+      for await (var entry of handle.values()){
+        if(entry.kind === "file"){
+          try{
+            var f = await entry.getFile();
+            list.push({file:f, checked:false});
+          }catch(e){}
+        }
+      }
+    }catch(err){
+      console.error(err);
+      setStatus("フォルダの読み込みに失敗しました。もう一度お試しください。", true);
+      return;
+    }
+    list.sort(function(a,b){ return b.file.lastModified - a.file.lastModified; });
+    pickerFiles = list;
+    renderPicker(handle.name);
+    if(list.length === 0){
+      pickerTitle.textContent = "「" + handle.name + "」にファイルがありません";
+    }
+  }
+
+  srcBtn.addEventListener("click", async function(){
+    if(!window.showDirectoryPicker){
+      setStatus("このブラウザはフォルダ読み込みに未対応です。Chrome / Edge をお使いください。", true);
+      return;
+    }
+    var handle;
+    try{
+      handle = await window.showDirectoryPicker({ mode: "read" });
+    }catch(err){
+      if(err && err.name === "AbortError") return;
+      console.error(err);
+      setStatus("この画面ではフォルダ選択が開けません。デプロイしたURLからお試しください。", true);
+      return;
+    }
+    try{
+      await idbSet("srcDir", handle);
+      showLastSrcBtn(handle);
+    }catch(e){}
+    await loadFolderFiles(handle);
+  });
+
+  lastSrcBtn.addEventListener("click", async function(){
+    var handle;
+    try{ handle = await idbGet("srcDir"); }catch(e){ handle = null; }
+    if(!handle){
+      setStatus("記憶されたフォルダが見つかりません。「フォルダから読み込む」からやり直してください。", true);
+      return;
+    }
+    try{
+      var perm = await handle.queryPermission({ mode: "read" });
+      if(perm !== "granted"){
+        perm = await handle.requestPermission({ mode: "read" });
+      }
+      if(perm !== "granted"){
+        setStatus("フォルダへのアクセスが許可されませんでした。", true);
+        return;
+      }
+    }catch(err){
+      console.error(err);
+      setStatus("フォルダにアクセスできませんでした。「フォルダから読み込む」からやり直してください。", true);
+      return;
+    }
+    await loadFolderFiles(handle);
+  });
+
+  pickAll.addEventListener("change", function(){
+    pickerFiles.forEach(function(p){ p.checked = pickAll.checked; });
+    renderPicker(currentSrcName);
+  });
+
+  pickAdd.addEventListener("click", function(){
+    var selected = pickerFiles.filter(function(p){ return p.checked; }).map(function(p){ return p.file; });
+    if(selected.length === 0){
+      setStatus("ファイルにチェックを入れてから追加してください。", true);
+      return;
+    }
+    addFiles(selected);
+    picker.style.display = "none";
+    pickerFiles = [];
+  });
+
+  pickCancel.addEventListener("click", function(){
+    picker.style.display = "none";
+    pickerFiles = [];
+  });
+
+  // ===== ZIPダウンロード =====
+  zipBtn.addEventListener("click", function(){
+    if(files.length === 0) return;
+    if(!confirmUnset()) return;
+
+    zipBtn.disabled = true;
+    setStatus("ZIPを作成中…", false);
+
+    try{
+      var zip = new JSZip();
+      var numbers = computeNumbers();
+      files.forEach(function(item, i){
+        var p = buildPath(item, numbers[i], getExt(item.file.name));
+        zip.file(p.full, item.file);
+      });
+      zip.generateAsync({type:"blob"}).then(function(blob){
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "書類整理_" + formatDate() + ".zip";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+        setStatus("ダウンロードを開始しました（" + files.length + " 件）", false);
+        zipBtn.disabled = false;
+      }).catch(function(err){
+        console.error(err);
+        setStatus("ZIP作成に失敗しました。もう一度お試しください。", true);
+        zipBtn.disabled = false;
+      });
+    }catch(err){
+      console.error(err);
+      setStatus("ZIP作成に失敗しました。もう一度お試しください。", true);
+      zipBtn.disabled = false;
+    }
+  });
+
+  clearBtn.addEventListener("click", function(){
+    files = [];
+    setStatus("リストを空にしました", false);
+    renderAll();
+  });
+
+  // ===== 層の名前・項目の保存と読み込み =====
+  function saveLayers(){
+    try{
+      idbSet("layersConfig2", LAYERS.map(function(L){
+        return {
+          key: L.key,
+          label: L.label,
+          items: L.items.map(function(it){
+            return { name: it.name, parents: it.parents ? it.parents.slice() : null };
+          })
+        };
+      })).catch(function(){});
+    }catch(e){}
+  }
+
+  // 「名前を変更」ボタン
+  Array.prototype.forEach.call(document.querySelectorAll(".edit-label"), function(btn){
+    btn.onclick = function(){
+      var key = btn.getAttribute("data-layer");
+      var L = getLayer(key);
+      var v = prompt("この層の名前を入力してください", L.label);
+      if(v === null) return;
+      v = sanitize(v);
+      if(!v) return;
+      L.label = v;
+      saveLayers();
+      renderAll();
+    };
+  });
+
+  // 保存済みの設定があれば読み込む（旧形式の設定は無視して新しい初期値を使用）
+  (function(){
+    try{
+      idbGet("layersConfig2").then(function(cfg){
+        if(cfg && cfg.length){
+          cfg.forEach(function(saved){
+            var L = getLayer(saved.key);
+            if(L && saved.label){ L.label = saved.label; }
+            if(L && saved.items){
+              L.items = saved.items.map(function(it){
+                return { name: it.name, parents: it.parents ? it.parents.slice() : null };
+              });
+            }
+          });
+          renderAll();
+        }
+      }).catch(function(){});
+    }catch(e){}
+  })();
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
