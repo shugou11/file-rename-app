@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>書類一括リネーム＆フォルダ分け</title>
+<title>書類一括リネーム v17</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
@@ -231,7 +231,7 @@
 
   <header>
     <div class="tb-main">
-      <h1>書類一括リネーム＆フォルダ分け</h1>
+      <h1>書類一括リネーム <span style="font-size:.85rem;color:var(--ink-soft);letter-spacing:.05em">v17</span></h1>
       <p>日付・邸名・分類・業者・種類を組み合わせたファイル名に一括変換｜処理はこの画面内で完結</p>
     </div>
     <div class="tb-stamp"><span>整理</span></div>
@@ -340,8 +340,11 @@
       <button class="btn-sub" id="clearBtn" disabled>リストを空にする</button>
       <span class="status" id="status"></span>
     </div>
-    <p style="font-size:.78rem;color:var(--ink-soft);margin-top:10px" id="saveHint">
-      「直接保存」は保存先フォルダを選ぶと、リネーム済みファイルをその場所へ直接書き込みます（Chrome / Edge対応）。一度保存すると次回から「前回のフォルダに保存」でワンクリック保存できます。Googleドライブ（パソコン版）のフォルダを選べば、自動でクラウドにも同期されます。
+    <p style="font-size:.8rem;color:var(--ink-soft);margin-top:10px;line-height:1.8" id="saveHint">
+      保存先は<b>パソコン内のどこでもOK</b>です（デスクトップのフォルダ、書類、Googleドライブなど）。<br>
+      ・保存時にブラウザが「ファイルの変更を許可しますか？」と聞いてきたら<b>「許可」</b>を押してください<br>
+      ・デスクトップそのものが選べないときは、デスクトップに<b>新しいフォルダを作ってそれを選べばOK</b>です<br>
+      ・一度保存すると、次回から<b>「〇〇に保存」ボタン</b>でワンクリックで同じ場所に保存できます
     </p>
   </section>
 
@@ -902,7 +905,7 @@
     }catch(err){
       if(err && err.name === "AbortError") return;
       console.error(err);
-      setStatus("この画面ではフォルダ選択が開けません。デプロイしたURLからお試しください。", true);
+      setStatus("フォルダを選べませんでした。デスクトップ直下などが選べない場合は、新しいフォルダを作ってそれを選んでください。", true);
       return;
     }
 
