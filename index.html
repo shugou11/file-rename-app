@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>書類一括リネーム v17</title>
+<title>書類一括リネーム v18</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
@@ -218,6 +218,50 @@
   .status{font-size:.85rem;color:var(--ok);font-weight:600}
   .status.err{color:var(--accent)}
 
+  /* モード切替 */
+  .tabs{display:flex;gap:0;margin-bottom:16px;border:2px solid var(--ink);background:#fff}
+  .tabs button{
+    flex:1;border:none;background:#fff;color:var(--ink);padding:12px 10px;
+    font-family:inherit;font-size:.95rem;font-weight:700;letter-spacing:.08em;cursor:pointer;
+  }
+  .tabs button+button{border-left:2px solid var(--ink)}
+  .tabs button.on{background:var(--ink);color:#fff}
+
+  /* レシート・明細モード */
+  .r-opts{display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;font-size:.88rem}
+  .r-opts label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .r-opts input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+  .key-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .key-row input{
+    flex:1;min-width:220px;padding:9px 10px;border:1px solid var(--line);
+    font-family:var(--mono);font-size:.88rem;border-radius:0;
+  }
+  .key-state{font-size:.82rem;font-weight:600}
+  .key-state.ok{color:var(--ok)}
+  .key-state.ng{color:var(--accent)}
+  .note{font-size:.78rem;color:var(--ink-soft);margin-top:8px;line-height:1.8}
+  .note a{color:var(--ink)}
+  .tbl-wrap{overflow-x:auto}
+  #rTable td.ed input,#rTable td.ed select{
+    width:100%;padding:5px 6px;border:1px solid var(--line);font-family:inherit;
+    font-size:.8rem;background:#fff;color:var(--ink);border-radius:0;
+  }
+  #rTable td.ed input.miss,#rTable td.ed select.miss{border-color:var(--accent);background:var(--accent-soft)}
+  #rTable td.ed select.ai{border-color:var(--ok)}
+  #rTable td.d{width:128px}
+  #rTable td.s{width:140px}
+  #rTable td.a{width:84px}
+  #rTable td.c{width:112px}
+  #rTable td.new .oldn{display:block;font-weight:400;color:var(--ink-soft);font-size:.7rem;margin-top:2px}
+  #rTable td.st{font-size:.74rem;white-space:nowrap;width:70px}
+  .st-wait{color:var(--ink-soft)}
+  .st-read{color:#a26b00}
+  .st-ok{color:var(--ok);font-weight:700}
+  .st-chk{color:var(--accent);font-weight:700}
+  .st-err{color:var(--accent)}
+  .sum{margin-top:14px;display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.82rem;color:var(--ink-soft)}
+  .sum b{color:var(--ink);font-family:var(--mono)}
+
   @media(max-width:640px){
     td.old,th.old{display:none}
     .tb-stamp{display:none}
@@ -231,12 +275,18 @@
 
   <header>
     <div class="tb-main">
-      <h1>書類一括リネーム <span style="font-size:.85rem;color:var(--ink-soft);letter-spacing:.05em">v17</span></h1>
-      <p>日付・邸名・分類・業者・種類を組み合わせたファイル名に一括変換｜処理はこの画面内で完結</p>
+      <h1>書類一括リネーム <span style="font-size:.85rem;color:var(--ink-soft);letter-spacing:.05em">v18</span></h1>
+      <p id="headSub">日付・邸名・分類・業者・種類を組み合わせたファイル名に一括変換｜処理はこの画面内で完結</p>
     </div>
     <div class="tb-stamp"><span>整理</span></div>
   </header>
 
+  <nav class="tabs" role="tablist">
+    <button id="tabDoc" class="on" role="tab">書類モード</button>
+    <button id="tabRcpt" role="tab">レシート・明細モード</button>
+  </nav>
+
+  <div id="docMode">
   <section class="card">
     <h2>01｜分類の選択（クリックで選択 → その状態で追加したファイルに適用）</h2>
 
@@ -347,6 +397,87 @@
       ・一度保存すると、次回から<b>「〇〇に保存」ボタン</b>でワンクリックで同じ場所に保存できます
     </p>
   </section>
+  </div><!-- /docMode -->
+
+  <div id="rcptMode" style="display:none">
+    <section class="card">
+      <h2>01｜読み取り設定</h2>
+      <div class="field" style="margin-bottom:12px">
+        <label>AnthropicのAPIキー（スキャン画像から日付・店名・金額・勘定科目を読み取るのに使います）</label>
+        <div class="key-row">
+          <input type="password" id="rKey" placeholder="sk-ant-…" autocomplete="off">
+          <button class="btn-sub" id="rKeySave" style="padding:9px 14px">保存</button>
+          <span class="key-state" id="rKeyState"></span>
+        </div>
+        <p class="note">キーは<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>で作成できます（利用料はレシート1枚あたり数円程度）。<br>キーはこのパソコンのブラウザ内にだけ保存され、読み取りのときAnthropicにだけ送られます。キーなしでも手入力でリネーム・科目分けはできます。</p>
+      </div>
+      <div class="form-grid">
+        <div class="field">
+          <label>読み取りの精度</label>
+          <select id="rModel">
+            <option value="claude-sonnet-5-5">高精度（おすすめ）</option>
+            <option value="claude-haiku-5-5">低コスト</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>日付の形式</label>
+          <select id="rDateFmt">
+            <option value="YYYYMMDD">20261120</option>
+            <option value="YYYY-MM-DD">2026-11-20</option>
+            <option value="YYMMDD">261120</option>
+          </select>
+        </div>
+      </div>
+      <div class="r-opts">
+        <label><input type="checkbox" id="rOptFolder" checked> 勘定科目ごとにフォルダ分け</label>
+        <label><input type="checkbox" id="rOptAmount"> ファイル名に金額も付ける</label>
+      </div>
+      <div class="name-preview">
+        <span class="lbl">仕上がりイメージ</span>
+        <span id="rPreview"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>02｜勘定科目（並び順＝フォルダの番号順。×で削除・追加も可）</h2>
+      <div class="chips" id="rCats"></div>
+      <p class="note">表で科目を直すと「店名→科目」を覚えて、次回から同じ店は自動でその科目になります。<button class="edit-label" id="rForget" style="margin-left:6px">覚えた店をリセット</button></p>
+    </section>
+
+    <section class="card">
+      <h2>03｜レシート・明細ファイル</h2>
+      <div class="drop" id="rDrop" role="button" tabindex="0" aria-label="ファイルを選択">
+        <p>スキャンしたPDF（または写真）をここにドラッグ＆ドロップ</p>
+        <small id="rDropHint">複数まとめてOK。1ファイル＝レシート1枚、またはカード明細1か月分として読み取ります</small>
+        <input type="file" id="rInput" multiple accept=".pdf,image/jpeg,image/png,image/webp" hidden>
+      </div>
+
+      <div style="margin-top:16px" class="tbl-wrap">
+        <table id="rTable" style="display:none">
+          <thead>
+            <tr>
+              <th>No.</th><th>日付</th><th>店名</th><th>金額</th><th>勘定科目</th>
+              <th>新しいファイル名</th><th>状態</th><th style="text-align:right"></th>
+            </tr>
+          </thead>
+          <tbody id="rBody"></tbody>
+        </table>
+        <p class="empty" id="rEmpty">まだファイルがありません。上のエリアに追加してください。</p>
+      </div>
+      <div class="sum" id="rSum"></div>
+
+      <div class="actions">
+        <button class="btn-primary" id="rLastBtn" style="display:none"></button>
+        <button class="btn-primary" id="rSaveBtn" disabled>フォルダを選んで直接保存</button>
+        <button class="btn-sub" id="rZipBtn" disabled>ZIPでダウンロード</button>
+        <button class="btn-sub" id="rSortBtn" disabled>科目・日付順に並べ替え</button>
+        <button class="btn-sub" id="rReadBtn" disabled>未読み取りをAIで読む</button>
+        <button class="btn-sub" id="rClearBtn" disabled>リストを空にする</button>
+        <span class="status" id="rStatus"></span>
+      </div>
+      <p class="note">保存すると「01_材料費」「02_外注費」…のように科目ごとのフォルダに日付順で入り、<b>経費一覧.csv</b>（Excelで開ける一覧＋科目別合計）も一緒に保存されます。<br>赤い欄は読み取れなかった・要確認の項目です。「見る」で元のPDFを開いて確認できます。</p>
+    </section>
+  </div><!-- /rcptMode -->
 
 </div>
 
@@ -1184,6 +1315,671 @@
       }).catch(function(){});
     }catch(e){}
   })();
+
+
+  // =====================================================================
+  // ===== レシート・明細モード（v18） =====
+  // =====================================================================
+  var DEFAULT_CATS = [
+    "材料費","外注費","旅費交通費","車両費","消耗品費","事務用品費","接待交際費","会議費",
+    "通信費","荷造運賃","水道光熱費","広告宣伝費","支払手数料","租税公課","福利厚生費",
+    "修繕費","新聞図書費","諸会費","雑費","カード明細"
+  ];
+  // 店名からの科目推測（APIキーなし・手入力時の補助）
+  var GUESS = [
+    [/ENEOS|エネオス|出光|apollo|アポロ|コスモ石油|シェル|ガソリン|給油|オートバックス|イエローハット|洗車|車検/i, "車両費"],
+    [/タイムズ|Times|パーキング|駐車|ETC|NEXCO|高速|ＪＲ|(^|[^A-Za-z])JR|山陽電|阪神|阪急|神姫|バス|タクシー|新幹線|交通/i, "旅費交通費"],
+    [/コーナン|カインズ|コメリ|DCM|ナフコ|ビバホーム|ジョイフル本田|ロイヤルホームセンター|ホームセンター|建材|資材|木材|モノタロウ|MonotaRO/i, "材料費"],
+    [/郵便|切手|ドコモ|docomo|(^|[^A-Za-z])au([^A-Za-z]|$)|ソフトバンク|SoftBank|楽天モバイル|NTT/i, "通信費"],
+    [/ヤマト運輸|佐川|ゆうパック|宅急便|宅配/i, "荷造運賃"],
+    [/文具|アスクル|ASKUL|事務用品/i, "事務用品費"],
+    [/スターバックス|スタバ|ドトール|コメダ|タリーズ|珈琲|コーヒー|喫茶|カフェ/i, "会議費"],
+    [/居酒屋|寿司|鮨|焼肉|料亭|割烹|ダイニング/i, "接待交際費"],
+    [/書店|ジュンク堂|紀伊國屋|TSUTAYA|蔦屋|新聞/i, "新聞図書費"],
+    [/印紙|証紙|法務局|市役所/i, "租税公課"],
+    [/Amazon|アマゾン|ダイソー|セリア|キャンドゥ|ニトリ|ヨドバシ|ビックカメラ|エディオン|ジョーシン|ケーズ/i, "消耗品費"]
+  ];
+
+  var R = {
+    cats: DEFAULT_CATS.slice(),
+    storeCat: {},        // 学習した「店名 → 科目」
+    items: [],           // {file, date, store, amount, cat, catSrc, type, memo, state, err, url}
+    key: "",
+    running: 0,
+    MAX_PARALLEL: 3
+  };
+  var rEl = {
+    key:$("rKey"), keySave:$("rKeySave"), keyState:$("rKeyState"), model:$("rModel"),
+    dateFmt:$("rDateFmt"), optFolder:$("rOptFolder"), optAmount:$("rOptAmount"),
+    preview:$("rPreview"), cats:$("rCats"), forget:$("rForget"),
+    drop:$("rDrop"), input:$("rInput"), table:$("rTable"), body:$("rBody"), empty:$("rEmpty"), sum:$("rSum"),
+    lastBtn:$("rLastBtn"), saveBtn:$("rSaveBtn"), zipBtn:$("rZipBtn"), sortBtn:$("rSortBtn"),
+    readBtn:$("rReadBtn"), clearBtn:$("rClearBtn"), status:$("rStatus")
+  };
+
+  function rSetStatus(msg, isErr){
+    rEl.status.textContent = msg;
+    rEl.status.className = "status" + (isErr ? " err" : "");
+    clearTimeout(rSetStatus._t);
+    if(msg){ rSetStatus._t = setTimeout(function(){ rEl.status.textContent = ""; }, 8000); }
+  }
+  function pad2(n){ return ("0"+n).slice(-2); }
+  function todayStr(){
+    var d = new Date();
+    return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());
+  }
+  function yen(n){ return (n === "" || n === null || isNaN(n)) ? "" : Number(n).toLocaleString("ja-JP"); }
+
+  function guessCat(store){
+    if(!store) return "";
+    if(R.storeCat[store] && R.cats.indexOf(R.storeCat[store]) !== -1) return R.storeCat[store];
+    for(var i=0;i<GUESS.length;i++){
+      if(GUESS[i][0].test(store) && R.cats.indexOf(GUESS[i][1]) !== -1) return GUESS[i][1];
+    }
+    return "";
+  }
+
+  // ----- ファイル名・フォルダ -----
+  function rFmtDate(d){
+    if(!d) return "日付不明";
+    var p = d.split("-");
+    var f = rEl.dateFmt.value;
+    if(f === "YYYYMMDD") return p[0]+p[1]+p[2];
+    if(f === "YYMMDD") return p[0].slice(2)+p[1]+p[2];
+    return d;
+  }
+  function rBase(it){
+    var segs = [rFmtDate(it.date), sanitize(it.store || "") || "店名不明"];
+    if(rEl.optAmount.checked && it.amount !== "" && it.amount !== null) segs.push(it.amount + "円");
+    return segs.join("_");
+  }
+  function rFolder(it){
+    if(!rEl.optFolder.checked) return null;
+    var i = R.cats.indexOf(it.cat);
+    if(i < 0) return "99_未分類";
+    return pad2(i+1) + "_" + sanitize(it.cat);
+  }
+  function rPaths(){
+    var used = {};
+    return R.items.map(function(it){
+      var folder = rFolder(it);
+      var base = rBase(it);
+      var ext = getExt(it.file.name) || ".pdf";
+      var k = (folder || "") + "/" + base + ext;
+      var n = used[k] || 0;
+      used[k] = n + 1;
+      var name = n ? base + "_" + (n+1) + ext : base + ext;
+      return { folder:folder, name:name, full: folder ? folder + "/" + name : name };
+    });
+  }
+  function rSort(){
+    R.items.sort(function(a,b){
+      var ia = R.cats.indexOf(a.cat), ib = R.cats.indexOf(b.cat);
+      if(ia < 0) ia = 999; if(ib < 0) ib = 999;
+      if(ia !== ib) return ia - ib;
+      var da = a.date || "9999", db = b.date || "9999";
+      if(da !== db) return da < db ? -1 : 1;
+      return (a.store || "").localeCompare(b.store || "", "ja");
+    });
+  }
+
+  // ----- 勘定科目チップ -----
+  function rRenderCats(){
+    rEl.cats.innerHTML = "";
+    R.cats.forEach(function(c, i){
+      var chip = document.createElement("span");
+      chip.className = "chip";
+      chip.style.cursor = "default";
+      var label = document.createElement("span");
+      label.textContent = pad2(i+1) + " " + c;
+      var up = document.createElement("button");
+      up.textContent = "←"; up.title = "前へ移動";
+      up.onclick = function(){
+        if(i === 0) return;
+        var t = R.cats[i-1]; R.cats[i-1] = R.cats[i]; R.cats[i] = t;
+        rSaveCats(); rRenderAll();
+      };
+      var del = document.createElement("button");
+      del.textContent = "×"; del.title = c + " を削除";
+      del.onclick = function(){
+        if(!confirm("勘定科目「" + c + "」を削除しますか？")) return;
+        R.cats.splice(i,1);
+        R.items.forEach(function(it){ if(it.cat === c){ it.cat = ""; it.catSrc = ""; } });
+        rSaveCats(); rRenderAll();
+      };
+      chip.appendChild(label);
+      if(i > 0) chip.appendChild(up);
+      chip.appendChild(del);
+      rEl.cats.appendChild(chip);
+    });
+    var add = document.createElement("span");
+    add.className = "chip-add";
+    var input = document.createElement("input");
+    input.type = "text"; input.placeholder = "＋科目を追加";
+    var btn = document.createElement("button");
+    btn.textContent = "追加";
+    function doAdd(){
+      var v = sanitize(input.value);
+      if(!v) return;
+      if(R.cats.indexOf(v) !== -1){ rSetStatus("「" + v + "」はすでにあります", true); return; }
+      var ci = R.cats.indexOf("カード明細");
+      if(ci !== -1) R.cats.splice(ci, 0, v); else R.cats.push(v);
+      rSaveCats(); rRenderAll();
+    }
+    btn.onclick = doAdd;
+    input.onkeydown = function(e){ if(e.key === "Enter"){ e.preventDefault(); doAdd(); } };
+    add.appendChild(input); add.appendChild(btn);
+    rEl.cats.appendChild(add);
+  }
+
+  // ----- 表 -----
+  function stateLabel(it){
+    if(it.state === "wait") return ['<span class="st-wait">待機中</span>', ""];
+    if(it.state === "reading") return ['<span class="st-read">読取中…</span>', ""];
+    if(it.state === "error") return ['<span class="st-err">エラー</span>', it.err];
+    var need = needCheck(it);
+    if(need) return ['<span class="st-chk">要確認</span>', need];
+    if(it.state === "done") return ['<span class="st-ok">✓ 読取済</span>', it.memo || ""];
+    return ['<span class="st-ok">✓ 入力済</span>', it.err || ""];
+  }
+  function needCheck(it){
+    var r = [];
+    if(!it.date) r.push("日付");
+    if(!it.store) r.push("店名");
+    if(!it.cat) r.push("勘定科目");
+    var s = r.length ? r.join("・") + "が未入力" : "";
+    if(it.count > 1) s += (s ? "／" : "") + "1ファイルにレシートが" + it.count + "枚あります";
+    if(it.type === "その他") s += (s ? "／" : "") + "レシート・明細ではない可能性";
+    return s;
+  }
+
+  function rRenderTable(){
+    rEl.body.innerHTML = "";
+    var has = R.items.length > 0;
+    rEl.table.style.display = has ? "table" : "none";
+    rEl.empty.style.display = has ? "none" : "block";
+    [rEl.saveBtn, rEl.zipBtn, rEl.sortBtn, rEl.clearBtn, rEl.lastBtn].forEach(function(b){ b.disabled = !has; });
+    rEl.readBtn.disabled = !R.items.some(function(it){ return it.state === "manual" || it.state === "error"; });
+
+    var paths = rPaths();
+    R.items.forEach(function(it, i){
+      var tr = document.createElement("tr");
+      var busy = it.state === "reading" || it.state === "wait";
+
+      var tdNo = document.createElement("td"); tdNo.className = "no"; tdNo.textContent = i+1;
+
+      var tdD = document.createElement("td"); tdD.className = "ed d";
+      var inD = document.createElement("input"); inD.type = "date"; inD.value = it.date || "";
+      if(!it.date && !busy) inD.className = "miss";
+      inD.disabled = busy;
+      inD.onchange = function(){ it.date = inD.value; rRenderAll(); };
+      tdD.appendChild(inD);
+
+      var tdS = document.createElement("td"); tdS.className = "ed s";
+      var inS = document.createElement("input"); inS.type = "text"; inS.value = it.store || ""; inS.placeholder = "店名";
+      if(!it.store && !busy) inS.className = "miss";
+      inS.disabled = busy;
+      inS.onchange = function(){
+        it.store = sanitize(inS.value);
+        if(!it.cat || it.catSrc !== "manual"){
+          var g = guessCat(it.store);
+          if(g){ it.cat = g; it.catSrc = R.storeCat[it.store] ? "learn" : "guess"; }
+        }
+        rRenderAll();
+      };
+      tdS.appendChild(inS);
+
+      var tdA = document.createElement("td"); tdA.className = "ed a";
+      var inA = document.createElement("input"); inA.type = "number"; inA.min = "0"; inA.placeholder = "円";
+      inA.value = (it.amount === null || it.amount === undefined) ? "" : it.amount;
+      inA.disabled = busy;
+      inA.onchange = function(){ it.amount = inA.value === "" ? "" : Math.round(Number(inA.value)); rRenderAll(); };
+      tdA.appendChild(inA);
+
+      var tdC = document.createElement("td"); tdC.className = "ed c";
+      var sel = document.createElement("select");
+      var o0 = document.createElement("option"); o0.value = ""; o0.textContent = "（未分類）"; sel.appendChild(o0);
+      R.cats.forEach(function(c){
+        var o = document.createElement("option"); o.value = c; o.textContent = c;
+        if(it.cat === c) o.selected = true;
+        sel.appendChild(o);
+      });
+      if(!it.cat && !busy) sel.className = "miss";
+      else if(it.catSrc === "ai" || it.catSrc === "learn") sel.className = "ai";
+      sel.title = {ai:"AIが判定", learn:"この店で前回選んだ科目", guess:"店名から推測", manual:"手で選択"}[it.catSrc] || "";
+      sel.disabled = busy;
+      sel.onchange = function(){
+        it.cat = sel.value; it.catSrc = "manual";
+        if(it.store && it.cat){ R.storeCat[it.store] = it.cat; rSaveStoreCat(); }
+        rRenderAll();
+      };
+      tdC.appendChild(sel);
+
+      var tdN = document.createElement("td"); tdN.className = "new";
+      var p = paths[i];
+      tdN.innerHTML = (p.folder ? '<span class="folder">' + escapeHtml(p.folder) + '/</span>' : "") +
+        escapeHtml(p.name) + '<span class="oldn">元：' + escapeHtml(it.file.name) + '</span>';
+
+      var tdSt = document.createElement("td"); tdSt.className = "st";
+      var sl = stateLabel(it);
+      tdSt.innerHTML = sl[0];
+      tdSt.title = sl[1];
+      if(sl[1] && (it.state === "error" || needCheck(it))){
+        var small = document.createElement("div");
+        small.style.cssText = "font-size:.68rem;color:var(--accent);white-space:normal;max-width:120px";
+        small.textContent = sl[1];
+        tdSt.appendChild(small);
+      }
+
+      var tdCtrl = document.createElement("td"); tdCtrl.className = "ctrl";
+      var view = document.createElement("button");
+      view.className = "mini"; view.textContent = "見"; view.title = "元のファイルを開いて確認";
+      view.onclick = function(){
+        if(!it.url) it.url = URL.createObjectURL(it.file);
+        window.open(it.url, "_blank");
+      };
+      var re = document.createElement("button");
+      re.className = "mini"; re.textContent = "↻"; re.title = "AIでもう一度読み取る";
+      re.disabled = busy || !canRead(it.file);
+      re.onclick = function(){
+        if(!R.key){ rSetStatus("先にAPIキーを保存してください", true); return; }
+        it.state = "wait"; it.err = ""; rRenderAll(); rPump();
+      };
+      var del = document.createElement("button");
+      del.className = "mini del"; del.textContent = "×"; del.title = "削除";
+      del.disabled = it.state === "reading";
+      del.onclick = function(){
+        if(it.url) URL.revokeObjectURL(it.url);
+        R.items.splice(R.items.indexOf(it), 1); rRenderAll();
+      };
+      tdCtrl.appendChild(view); tdCtrl.appendChild(re); tdCtrl.appendChild(del);
+
+      [tdNo, tdD, tdS, tdA, tdC, tdN, tdSt, tdCtrl].forEach(function(td){ tr.appendChild(td); });
+      rEl.body.appendChild(tr);
+    });
+
+    // 科目別合計
+    rEl.sum.innerHTML = "";
+    if(has){
+      var tot = {}, all = 0;
+      R.items.forEach(function(it){
+        var c = it.cat || "未分類";
+        var a = Number(it.amount) || 0;
+        tot[c] = (tot[c] || 0) + a;
+        if(c !== "カード明細") all += a;
+      });
+      var html = R.cats.concat(["未分類"]).filter(function(c){ return tot[c] !== undefined; })
+        .map(function(c){ return escapeHtml(c) + " <b>" + yen(tot[c]) + "</b>円"; });
+      html.push("合計（カード明細除く） <b>" + yen(all) + "</b>円");
+      rEl.sum.innerHTML = html.map(function(h){ return "<span>" + h + "</span>"; }).join("");
+    }
+  }
+
+  function rRenderPreview(){
+    var s = {date:todayStr(), store:"コーナン", amount:3280, cat: R.cats[0] || "材料費", file:{name:"scan.pdf"}};
+    var f = rFolder(s);
+    var name = rBase(s) + ".pdf";
+    rEl.preview.innerHTML = (f ? '<span class="folder">' + escapeHtml(f) + '/</span>' : "") + escapeHtml(name);
+  }
+
+  function rRenderAll(){ rRenderCats(); rRenderTable(); rRenderPreview(); }
+
+  // ----- ファイル追加 -----
+  function canRead(f){
+    var e = getExt(f.name);
+    return e === ".pdf" || /^image\/(jpeg|png|webp|gif)$/.test(f.type);
+  }
+  function rAdd(list){
+    var n = 0;
+    Array.prototype.forEach.call(list, function(f){
+      var it = {file:f, date:"", store:"", amount:"", cat:"", catSrc:"", type:"", memo:"", count:1, state:"manual", err:"", url:null};
+      if(!canRead(f)){ it.err = "PDF・JPG・PNG以外はAI読み取り不可（手入力してください）"; }
+      else if(f.size > 30 * 1024 * 1024){ it.err = "ファイルが大きすぎます（30MBまで）"; }
+      else if(R.key){ it.state = "wait"; }
+      R.items.push(it);
+      n++;
+    });
+    if(R.key){ rSetStatus(n + " 件追加 → AIで読み取り中…", false); }
+    else{ rSetStatus(n + " 件追加（APIキー未設定のため、日付・店名は手入力してください）", !R.key); }
+    rRenderAll();
+    rPump();
+  }
+
+  rEl.drop.addEventListener("click", function(){ rEl.input.click(); });
+  rEl.drop.addEventListener("keydown", function(e){
+    if(e.key === "Enter" || e.key === " "){ e.preventDefault(); rEl.input.click(); }
+  });
+  rEl.input.addEventListener("change", function(){ rAdd(rEl.input.files); rEl.input.value = ""; });
+  ["dragenter","dragover"].forEach(function(ev){
+    rEl.drop.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); rEl.drop.classList.add("over"); });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    rEl.drop.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); rEl.drop.classList.remove("over"); });
+  });
+  rEl.drop.addEventListener("drop", function(e){
+    if(e.dataTransfer && e.dataTransfer.files){ rAdd(e.dataTransfer.files); }
+  });
+
+  // ----- AI読み取り -----
+  function toB64(file){
+    return new Promise(function(res, rej){
+      var fr = new FileReader();
+      fr.onload = function(){ res(String(fr.result).split(",")[1]); };
+      fr.onerror = function(){ rej(new Error("ファイルを読み込めません")); };
+      fr.readAsDataURL(file);
+    });
+  }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  function buildPrompt(){
+    return [
+      "あなたは住宅リフォーム会社（株式会社ライフデザイン）の経理担当です。",
+      "添付はスキャンした書類です（レシート・領収書・クレジットカードの利用控え・クレジットカードの利用明細書のいずれか）。",
+      "読み取って、次の形式のJSONだけを出力してください。前後に説明文は書かないこと。",
+      '{"type":"レシート|領収書|カード控え|カード明細|その他","date":"YYYY-MM-DD","store":"店名","amount":数値,"category":"勘定科目","memo":"内容の要約","count":枚数}',
+      "",
+      "ルール：",
+      "- date：取引日。和暦は西暦に直す。年が印字されていなければ今日（" + todayStr() + "）以前で最も近い日付にする。カード明細は「お支払日」（なければ締め日）。読めなければ \"\"。",
+      "- store：屋号・チェーン名を短く（例：コーナン、セブンイレブン、ENEOS）。「株式会社」などの法人格、支店名、電話番号は付けない。カード明細はカード会社名＋「カード」（例：三井住友カード）。読めなければ \"\"。",
+      "- amount：税込の支払合計（円、数字のみ）。カード明細は今回の請求合計。読めなければ null。",
+      "- category：必ず次のリストから1つだけ選ぶ → " + R.cats.join("、"),
+      "  目安：ホームセンター・建材店・金物店での資材や部材＝材料費／ガソリン・洗車・車検・車の部品＝車両費／電車・バス・タクシー・駐車場・高速道路・ETC＝旅費交通費／取引先との飲食・手土産＝接待交際費／喫茶や少額の打合せ飲食＝会議費／文房具・コピー用紙・インク＝事務用品費／工具・日用品・10万円未満の備品＝消耗品費／切手・携帯電話・ネット回線＝通信費／宅配便の送料＝荷造運賃／収入印紙・証明書手数料＝租税公課／振込手数料＝支払手数料。",
+      "  カード明細（月ごとの利用明細書）は必ず「カード明細」。リストに無い科目は使わない。",
+      "- memo：主な品目などを20文字以内で。",
+      "- count：このファイルに別々のレシートが何枚写っているか（通常は1）。",
+      "- type：書類が上のどれにも当たらなければ「その他」。"
+    ].join("\n");
+  }
+
+  async function callClaude(file){
+    var b64 = await toB64(file);
+    var isPdf = getExt(file.name) === ".pdf";
+    var block = isPdf
+      ? {type:"document", source:{type:"base64", media_type:"application/pdf", data:b64}}
+      : {type:"image", source:{type:"base64", media_type:file.type, data:b64}};
+    var body = JSON.stringify({
+      model: rEl.model.value,
+      max_tokens: 800,
+      messages: [{role:"user", content:[block, {type:"text", text:buildPrompt()}]}]
+    });
+    for(var attempt = 0; attempt < 4; attempt++){
+      var resp;
+      try{
+        resp = await fetch("https://api.anthropic.com/v1/messages", {
+          method:"POST",
+          headers:{
+            "content-type":"application/json",
+            "x-api-key": R.key,
+            "anthropic-version":"2023-06-01",
+            "anthropic-dangerous-direct-browser-access":"true"
+          },
+          body: body
+        });
+      }catch(e){
+        if(attempt < 3){ await sleep(2000 * (attempt+1)); continue; }
+        throw new Error("接続できません（ネット接続を確認してください）");
+      }
+      if(resp.ok){
+        var j = await resp.json();
+        var text = (j.content || []).filter(function(c){ return c.type === "text"; })
+          .map(function(c){ return c.text; }).join("");
+        var m = text.match(/\{[\s\S]*\}/);
+        if(!m) throw new Error("読み取り結果を解釈できませんでした");
+        try{ return JSON.parse(m[0]); }catch(e){ throw new Error("読み取り結果を解釈できませんでした"); }
+      }
+      var msg = "";
+      try{ var ej = await resp.json(); msg = (ej.error && ej.error.message) || ""; }catch(e){}
+      if(resp.status === 401) throw new Error("APIキーが正しくありません");
+      if(resp.status === 403) throw new Error("このAPIキーでは使えません：" + msg);
+      if(resp.status === 400){
+        if(/credit/i.test(msg)) throw new Error("APIのクレジット残高が不足しています（console.anthropic.comでチャージ）");
+        throw new Error("読み取れない形式です：" + msg.slice(0, 80));
+      }
+      if([429, 500, 502, 503, 529].indexOf(resp.status) !== -1 && attempt < 3){
+        await sleep(3000 * (attempt+1) * (attempt+1));
+        continue;
+      }
+      throw new Error("エラー（" + resp.status + "）" + msg.slice(0, 60));
+    }
+    throw new Error("混み合っています。少し待って↻で再試行してください");
+  }
+
+  function applyResult(it, r){
+    it.type = typeof r.type === "string" ? r.type : "";
+    it.date = (typeof r.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.date)) ? r.date : "";
+    it.store = typeof r.store === "string" ? sanitize(r.store).replace(/\s+/g, "") : "";
+    var a = Number(String(r.amount === null || r.amount === undefined ? "" : r.amount).replace(/[^\d.-]/g, ""));
+    it.amount = (r.amount === null || r.amount === undefined || r.amount === "" || isNaN(a)) ? "" : Math.round(a);
+    it.memo = typeof r.memo === "string" ? r.memo : "";
+    it.count = Number(r.count) || 1;
+    // 科目の優先順：①この店で前回手で選んだ科目 ②AI判定 ③店名から推測
+    if(it.type === "カード明細" && R.cats.indexOf("カード明細") !== -1){
+      it.cat = "カード明細"; it.catSrc = "ai";
+    }else if(it.store && R.storeCat[it.store] && R.cats.indexOf(R.storeCat[it.store]) !== -1){
+      it.cat = R.storeCat[it.store]; it.catSrc = "learn";
+    }else if(typeof r.category === "string" && R.cats.indexOf(r.category) !== -1){
+      it.cat = r.category; it.catSrc = "ai";
+    }else{
+      it.cat = guessCat(it.store); it.catSrc = it.cat ? "guess" : "";
+    }
+  }
+
+  async function rReadOne(it){
+    it.state = "reading"; it.err = "";
+    R.running++;
+    rRenderTable();
+    try{
+      var r = await callClaude(it.file);
+      applyResult(it, r);
+      it.state = "done";
+    }catch(e){
+      it.state = "error"; it.err = e.message || String(e);
+      if(/APIキー|クレジット|このAPIキー/.test(it.err)){
+        // キーや残高の問題は全件同じなので、待機中のものを止める
+        R.items.forEach(function(x){ if(x.state === "wait"){ x.state = "error"; x.err = it.err; } });
+      }
+    }
+    R.running--;
+    var left = R.items.some(function(x){ return x.state === "wait" || x.state === "reading"; });
+    if(!left){
+      rSort();
+      var chk = R.items.filter(function(x){ return x.state === "error" || needCheck(x); }).length;
+      rSetStatus("読み取り完了。科目・日付順に並べました" + (chk ? "（要確認 " + chk + " 件）" : ""), chk > 0);
+    }
+    rRenderAll();
+    rPump();
+  }
+  function rPump(){
+    if(!R.key) return;
+    while(R.running < R.MAX_PARALLEL){
+      var next = R.items.filter(function(x){ return x.state === "wait"; })[0];
+      if(!next) break;
+      rReadOne(next);
+    }
+  }
+
+  rEl.readBtn.addEventListener("click", function(){
+    if(!R.key){ rSetStatus("先にAPIキーを保存してください", true); rEl.key.focus(); return; }
+    var n = 0;
+    R.items.forEach(function(it){
+      if((it.state === "manual" || it.state === "error") && canRead(it.file)){ it.state = "wait"; it.err = ""; n++; }
+    });
+    rSetStatus(n + " 件をAIで読み取り中…", false);
+    rRenderAll(); rPump();
+  });
+  rEl.sortBtn.addEventListener("click", function(){ rSort(); rRenderAll(); rSetStatus("科目・日付順に並べ替えました", false); });
+  rEl.clearBtn.addEventListener("click", function(){
+    if(R.running){ rSetStatus("読み取り中は空にできません", true); return; }
+    R.items.forEach(function(it){ if(it.url) URL.revokeObjectURL(it.url); });
+    R.items = []; rRenderAll(); rSetStatus("リストを空にしました", false);
+  });
+
+  // ----- 保存（CSV付き） -----
+  function csvCell(v){
+    var s = (v === null || v === undefined) ? "" : String(v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function rCsv(paths){
+    var rows = [["日付","店名","金額","勘定科目","種類","内容","保存ファイル","元のファイル名"]];
+    var tot = {};
+    R.items.forEach(function(it, i){
+      rows.push([it.date, it.store, it.amount, it.cat || "未分類", it.type, it.memo, paths[i].full, it.file.name]);
+      var c = it.cat || "未分類";
+      tot[c] = (tot[c] || 0) + (Number(it.amount) || 0);
+    });
+    rows.push([]);
+    rows.push(["勘定科目別合計"]);
+    R.cats.concat(["未分類"]).forEach(function(c){ if(tot[c] !== undefined) rows.push([c, "", tot[c]]); });
+    return "﻿" + rows.map(function(r){ return r.map(csvCell).join(","); }).join("\r\n") + "\r\n";
+  }
+  function csvName(){ return "経費一覧_" + todayStr().replace(/-/g, "") + ".csv"; }
+
+  function readyToSave(){
+    if(R.running || R.items.some(function(x){ return x.state === "wait"; })){
+      rSetStatus("読み取りが終わるまでお待ちください", true); return false;
+    }
+    var miss = R.items.filter(function(x){ return !x.date || !x.store; }).length;
+    if(miss && !confirm("日付か店名が空のファイルが " + miss + " 件あります（「日付不明」「店名不明」の名前になります）。このまま保存しますか？")) return false;
+    return true;
+  }
+
+  async function rSaveToDir(dir){
+    rSort(); rRenderAll();
+    var paths = rPaths();
+    var done = 0, failed = 0;
+    [rEl.saveBtn, rEl.lastBtn, rEl.zipBtn].forEach(function(b){ b.disabled = true; });
+    for(var i = 0; i < R.items.length; i++){
+      try{
+        var target = dir;
+        if(paths[i].folder) target = await dir.getDirectoryHandle(paths[i].folder, {create:true});
+        var fh = await target.getFileHandle(paths[i].name, {create:true});
+        var w = await fh.createWritable();
+        await w.write(R.items[i].file);
+        await w.close();
+        done++;
+        rSetStatus("保存中… " + done + " / " + R.items.length, false);
+      }catch(err){ console.error(err); failed++; }
+    }
+    try{
+      var ch = await dir.getFileHandle(csvName(), {create:true});
+      var cw = await ch.createWritable();
+      await cw.write(new Blob([rCsv(paths)], {type:"text/csv"}));
+      await cw.close();
+    }catch(err){ console.error(err); failed++; }
+    if(failed === 0) rSetStatus("完了！ " + done + " 件＋経費一覧CSVを「" + dir.name + "」に保存しました", false);
+    else rSetStatus(done + " 件保存。" + failed + " 件は保存できませんでした", true);
+    [rEl.saveBtn, rEl.lastBtn, rEl.zipBtn].forEach(function(b){ b.disabled = false; });
+  }
+  function rShowLast(h){
+    rEl.lastBtn.style.display = "";
+    rEl.lastBtn.textContent = "「" + h.name + "」に保存";
+  }
+  try{ idbGet("rcptLastDir").then(function(h){ if(h && h.name !== undefined) rShowLast(h); }).catch(function(){}); }catch(e){}
+
+  rEl.saveBtn.addEventListener("click", async function(){
+    if(!R.items.length || !readyToSave()) return;
+    if(!window.showDirectoryPicker){ rSetStatus("このブラウザは直接保存に未対応です。Chrome / Edge か、ZIPをご利用ください", true); return; }
+    var dir;
+    try{ dir = await window.showDirectoryPicker({mode:"readwrite"}); }
+    catch(err){ if(err && err.name === "AbortError") return; rSetStatus("フォルダを選べませんでした。新しいフォルダを作ってそれを選んでください", true); return; }
+    try{ await idbSet("rcptLastDir", dir); rShowLast(dir); }catch(e){}
+    await rSaveToDir(dir);
+  });
+  rEl.lastBtn.addEventListener("click", async function(){
+    if(!R.items.length || !readyToSave()) return;
+    var h;
+    try{ h = await idbGet("rcptLastDir"); }catch(e){ h = null; }
+    if(!h){ rSetStatus("記憶されたフォルダが見つかりません", true); return; }
+    try{
+      var perm = await h.queryPermission({mode:"readwrite"});
+      if(perm !== "granted") perm = await h.requestPermission({mode:"readwrite"});
+      if(perm !== "granted"){ rSetStatus("フォルダへのアクセスが許可されませんでした", true); return; }
+    }catch(err){ rSetStatus("フォルダにアクセスできませんでした。「フォルダを選んで直接保存」からやり直してください", true); return; }
+    await rSaveToDir(h);
+  });
+  rEl.zipBtn.addEventListener("click", function(){
+    if(!R.items.length || !readyToSave()) return;
+    rSort(); rRenderAll();
+    var paths = rPaths();
+    var zip = new JSZip();
+    R.items.forEach(function(it, i){ zip.file(paths[i].full, it.file); });
+    zip.file(csvName(), rCsv(paths));
+    rEl.zipBtn.disabled = true;
+    rSetStatus("ZIPを作成中…", false);
+    zip.generateAsync({type:"blob"}).then(function(blob){
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "経費整理_" + todayStr().replace(/-/g, "") + ".zip";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+      rSetStatus("ダウンロードを開始しました（" + R.items.length + " 件＋経費一覧CSV）", false);
+      rEl.zipBtn.disabled = false;
+    }).catch(function(err){ console.error(err); rSetStatus("ZIP作成に失敗しました", true); rEl.zipBtn.disabled = false; });
+  });
+
+  // ----- 設定の保存・読み込み -----
+  function rSaveCats(){ try{ idbSet("rcptCats", R.cats.slice()).catch(function(){}); }catch(e){} }
+  function rSaveStoreCat(){ try{ idbSet("rcptStoreCat", JSON.parse(JSON.stringify(R.storeCat))).catch(function(){}); }catch(e){} }
+  function rSaveOpts(){
+    try{ idbSet("rcptOpts", {model:rEl.model.value, dateFmt:rEl.dateFmt.value, folder:rEl.optFolder.checked, amount:rEl.optAmount.checked}).catch(function(){}); }catch(e){}
+  }
+  function rShowKeyState(){
+    if(R.key){ rEl.keyState.textContent = "✓ 保存済み（…" + R.key.slice(-4) + "）"; rEl.keyState.className = "key-state ok"; }
+    else{ rEl.keyState.textContent = "未設定（手入力モード）"; rEl.keyState.className = "key-state ng"; }
+  }
+  rEl.keySave.addEventListener("click", function(){
+    var v = rEl.key.value.trim();
+    if(v && !/^sk-ant-/.test(v)){ rSetStatus("APIキーは「sk-ant-」で始まります", true); return; }
+    R.key = v;
+    try{ idbSet("rcptKey", v).catch(function(){}); }catch(e){}
+    rEl.key.value = "";
+    rShowKeyState();
+    rSetStatus(v ? "APIキーを保存しました" : "APIキーを削除しました", false);
+    rRenderTable();
+  });
+  rEl.key.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); rEl.keySave.click(); } });
+  rEl.forget.addEventListener("click", function(){
+    if(!confirm("覚えた「店名→勘定科目」（" + Object.keys(R.storeCat).length + " 件）をすべて消しますか？")) return;
+    R.storeCat = {}; rSaveStoreCat(); rSetStatus("覚えた店をリセットしました", false);
+  });
+  [rEl.model, rEl.dateFmt, rEl.optFolder, rEl.optAmount].forEach(function(el){
+    el.addEventListener("change", function(){ rSaveOpts(); rRenderAll(); });
+  });
+
+  Promise.all([
+    idbGet("rcptKey").catch(function(){}), idbGet("rcptCats").catch(function(){}),
+    idbGet("rcptStoreCat").catch(function(){}), idbGet("rcptOpts").catch(function(){})
+  ]).then(function(v){
+    if(v[0]) R.key = v[0];
+    if(v[1] && v[1].length) R.cats = v[1];
+    if(v[2]) R.storeCat = v[2];
+    if(v[3]){
+      if(v[3].model) rEl.model.value = v[3].model;
+      if(v[3].dateFmt) rEl.dateFmt.value = v[3].dateFmt;
+      rEl.optFolder.checked = v[3].folder !== false;
+      rEl.optAmount.checked = !!v[3].amount;
+    }
+    rShowKeyState(); rRenderAll();
+  }).catch(function(){ rShowKeyState(); });
+  rShowKeyState();
+  rRenderAll();
+
+  // ----- モード切替 -----
+  var tabDoc = $("tabDoc"), tabRcpt = $("tabRcpt"), headSub = $("headSub");
+  function setMode(m){
+    var r = m === "rcpt";
+    $("docMode").style.display = r ? "none" : "";
+    $("rcptMode").style.display = r ? "" : "none";
+    tabDoc.className = r ? "" : "on";
+    tabRcpt.className = r ? "on" : "";
+    headSub.textContent = r
+      ? "スキャンしたレシート・カード明細を「日付_店名」にリネームし、勘定科目ごとに整理"
+      : "日付・邸名・分類・業者・種類を組み合わせたファイル名に一括変換｜処理はこの画面内で完結";
+    try{ idbSet("mode", m).catch(function(){}); }catch(e){}
+  }
+  tabDoc.addEventListener("click", function(){ setMode("doc"); });
+  tabRcpt.addEventListener("click", function(){ setMode("rcpt"); });
+  try{ idbGet("mode").then(function(m){ if(m === "rcpt") setMode("rcpt"); }).catch(function(){}); }catch(e){}
 
   renderAll();
 })();
